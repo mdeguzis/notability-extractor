@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# UV / virtualenv
+.venv/
+.uv/
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Anki output files
+*.apkg
+
+# macOS
+.DS_Store
+
+# editors
+.idea/
+.vscode/
+*.swp
