@@ -23,18 +23,26 @@ iCloud sync enabled, these files are present even if the iPad is the primary dev
 
 ## Usage
 
+First install so the `notability-extractor` console script lands on PATH:
+
+```bash
+make install
+```
+
+Then:
+
 ```bash
 # Auto-discover DB and export
-python3 notability_extractor.py
+notability-extractor
 
 # Specify DB explicitly
-python3 notability_extractor.py --db ~/Library/Group\ Containers/com.gingerlabs.Notability/Notability.sqlite
+notability-extractor --db ~/Library/Group\ Containers/com.gingerlabs.Notability/Notability.sqlite
 
 # Inspect tables first (useful when DB schema is unknown)
-python3 notability_extractor.py --list-tables
+notability-extractor --list-tables
 
 # Target a specific table and custom output path
-python3 notability_extractor.py --table ZFLASHCARD --out my_deck.apkg --deck-name "Biology 101"
+notability-extractor --table ZFLASHCARD --out my_deck.apkg --deck-name "Biology 101"
 ```
 
 ## Caveats: BLOBs and Protobufs

@@ -29,3 +29,6 @@ coverage.xml
 .idea/
 .vscode/
 *.swp
+
+docs/superpowers/
+.claude/
