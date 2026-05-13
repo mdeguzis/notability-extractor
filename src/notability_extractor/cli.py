@@ -3,13 +3,6 @@ Command-line interface for notability-extractor.
 
 Entry point: notability-extractor (registered via pyproject.toml)
 Also runnable as: python -m notability_extractor
-"""
-
-"""
-Command-line interface for notability-extractor.
-
-Entry point: notability-extractor (registered via pyproject.toml)
-Also runnable as: python -m notability_extractor
 
 TWO EXTRACTION MODES
 --------------------
@@ -32,6 +25,7 @@ Reference:
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 from notability_extractor import __version__
 from notability_extractor.anki import write_apkg
@@ -76,9 +70,7 @@ Examples:
 """,
     )
 
-    parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {__version__}"
-    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument(
         "--db",
         metavar="PATH",
@@ -117,7 +109,8 @@ Examples:
         ),
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable DEBUG-level logging.",
     )
@@ -125,8 +118,12 @@ Examples:
     return parser
 
 
-def _run_note_mode(args: argparse.Namespace) -> list[dict]:
+def _run_note_mode(args: argparse.Namespace) -> list[dict[str, Any]]:
     """Extract cards from .note file archives."""
+    # args is reserved for the upcoming --path override that lets you point at
+    # an alternate data dir (handy on Linux). Keep the signature symmetric with
+    # _run_sqlite_mode so the ternary in main() stays clean.
+    _ = args
     note_dirs = find_note_dirs()
     if not note_dirs:
         log.error(
@@ -153,7 +150,7 @@ def _run_note_mode(args: argparse.Namespace) -> list[dict]:
     return extract_cards_from_notes(note_files)
 
 
-def _run_sqlite_mode(args: argparse.Namespace) -> list[dict]:
+def _run_sqlite_mode(args: argparse.Namespace) -> list[dict[str, Any]]:
     """Extract cards from a Notability SQLite index database."""
     log.warning(
         "SQLite mode selected. NOTE: Confirmed research shows Notability does NOT store "
@@ -198,7 +195,7 @@ def _run_sqlite_mode(args: argparse.Namespace) -> list[dict]:
             sys.exit(1)
 
     log.info("Extracting from table(s): %s", target_tables)
-    all_cards: list[dict] = []
+    all_cards: list[dict[str, Any]] = []
     for table in target_tables:
         all_cards.extend(extract_cards(conn, table))
     conn.close()
@@ -215,10 +212,7 @@ def main() -> None:
         log.info("--list-tables implies --mode sqlite")
         args.mode = "sqlite"
 
-    if args.mode == "note":
-        all_cards = _run_note_mode(args)
-    else:
-        all_cards = _run_sqlite_mode(args)
+    all_cards = _run_note_mode(args) if args.mode == "note" else _run_sqlite_mode(args)
 
     if not all_cards:
         log.error(

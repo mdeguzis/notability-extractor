@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from notability_extractor.db import open_db
 from notability_extractor.extractor import extract_cards, extract_raw, map_front_back
 

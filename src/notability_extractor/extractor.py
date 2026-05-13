@@ -7,6 +7,7 @@ when binary data is detected so the caller knows manual protobuf work is needed.
 """
 
 import sqlite3
+from typing import Any
 
 from notability_extractor.db import describe_table
 from notability_extractor.utils import get_logger, is_binary
@@ -21,7 +22,7 @@ _BACK_KEYWORDS = ["back", "definition", "answer"]
 _SKIP_KEYWORDS = ["id", "z_pk", "blob", "data", "mod", "usn", "crt"]
 
 
-def extract_raw(conn: sqlite3.Connection, table: str) -> list[dict]:
+def extract_raw(conn: sqlite3.Connection, table: str) -> list[dict[str, Any]]:
     """
     Pull every row from *table* and return as plain dicts.
 
@@ -31,21 +32,17 @@ def extract_raw(conn: sqlite3.Connection, table: str) -> list[dict]:
     """
     cols = [c["name"] for c in describe_table(conn, table)]
     rows = conn.execute(f"SELECT * FROM '{table}'").fetchall()
-    log.debug(
-        "extract_raw: table=%s  columns=%s  rows=%d", table, cols, len(rows)
-    )
+    log.debug("extract_raw: table=%s  columns=%s  rows=%d", table, cols, len(rows))
 
-    records: list[dict] = []
+    records: list[dict[str, Any]] = []
     for row in rows:
-        record: dict = {}
+        record: dict[str, Any] = {}
         for col in cols:
             val = row[col]
             if is_binary(val):
                 try:
                     val = val.decode("utf-8")
-                    log.debug(
-                        "Column '%s' decoded from UTF-8 bytes (table=%s)", col, table
-                    )
+                    log.debug("Column '%s' decoded from UTF-8 bytes (table=%s)", col, table)
                 except (UnicodeDecodeError, AttributeError):
                     val = f"<binary blob {len(val)} bytes>"
                     log.warning(
@@ -72,7 +69,7 @@ def _pick_column(cols: list[str], keywords: list[str]) -> str | None:
     return None
 
 
-def map_front_back(records: list[dict]) -> list[dict]:
+def map_front_back(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Map raw row dicts to ``{"front": ..., "back": ...}`` dicts.
 
@@ -91,15 +88,9 @@ def map_front_back(records: list[dict]) -> list[dict]:
     back_col = _pick_column(cols, _BACK_KEYWORDS)
 
     if not front_col or not back_col:
-        text_cols = [
-            c for c in cols if not any(sk in c.lower() for sk in _SKIP_KEYWORDS)
-        ]
+        text_cols = [c for c in cols if not any(sk in c.lower() for sk in _SKIP_KEYWORDS)]
         front_col = text_cols[0] if len(text_cols) > 0 else cols[0]
-        back_col = (
-            text_cols[1]
-            if len(text_cols) > 1
-            else (cols[1] if len(cols) > 1 else cols[0])
-        )
+        back_col = text_cols[1] if len(text_cols) > 1 else (cols[1] if len(cols) > 1 else cols[0])
         log.info(
             "No obvious front/back columns found; falling back to '%s' (front) "
             "and '%s' (back). Use --table + --front-col/--back-col to override.",
@@ -115,6 +106,6 @@ def map_front_back(records: list[dict]) -> list[dict]:
     ]
 
 
-def extract_cards(conn: sqlite3.Connection, table: str) -> list[dict]:
+def extract_cards(conn: sqlite3.Connection, table: str) -> list[dict[str, Any]]:
     """Convenience wrapper: extract raw rows and map to front/back dicts."""
     return map_front_back(extract_raw(conn, table))

@@ -42,6 +42,11 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "ruff>=0.4",
+    "pylint>=3.0",
+    "mypy>=1.10",
+    "pyright>=1.1.350",
+    "black>=24.0",
+    "autopep8>=2.0",
 ]
 
 # ---------------------------------------------------------------------------
@@ -70,3 +75,61 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
+
+# ---------------------------------------------------------------------------
+# Black (formatter, primary)
+# ---------------------------------------------------------------------------
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+# ---------------------------------------------------------------------------
+# autopep8 (formatter, fixup pass after black)
+# ---------------------------------------------------------------------------
+[tool.autopep8]
+max-line-length = 100
+aggressive = 1
+
+# ---------------------------------------------------------------------------
+# mypy (type checker, strict)
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# ---------------------------------------------------------------------------
+# pyright (type checker, second opinion)
+# ---------------------------------------------------------------------------
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+# plist/sqlite walking code legitimately operates on dynamic heterogeneous data;
+# forcing explicit casts everywhere clutters real logic without catching real bugs.
+# mypy --strict still catches the things that actually matter (signatures, generics).
+reportUnknownMemberType = "none"
+reportUnknownVariableType = "none"
+reportUnknownArgumentType = "none"
+
+# ---------------------------------------------------------------------------
+# pylint (linter, primary - logic and design rules)
+# ---------------------------------------------------------------------------
+[tool.pylint.main]
+py-version = "3.11"
+
+[tool.pylint."messages control"]
+# ruff already covers style rules, let pylint focus on logic and design
+disable = [
+    "line-too-long",
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring",
+]
+
+[tool.pylint.format]
+max-line-length = 100

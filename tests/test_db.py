@@ -30,7 +30,8 @@ class TestOpenDb:
         conn.close()
 
     def test_raises_on_missing_file(self, tmp_path: Path):
-        with pytest.raises(Exception):
+        # sqlite3 raises OperationalError when read-only mode hits a missing file
+        with pytest.raises(sqlite3.OperationalError):
             open_db(tmp_path / "missing.sqlite")
 
 

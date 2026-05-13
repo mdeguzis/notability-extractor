@@ -16,8 +16,7 @@ def tmp_db(tmp_path: Path) -> Path:
     """Return a path to a minimal SQLite DB that mimics a Notability schema."""
     db = tmp_path / "Notability.sqlite"
     conn = sqlite3.connect(str(db))
-    conn.executescript(
-        """
+    conn.executescript("""
         CREATE TABLE ZFLASHCARD (
             Z_PK      INTEGER PRIMARY KEY,
             ZTERM     TEXT,
@@ -38,8 +37,7 @@ def tmp_db(tmp_path: Path) -> Path:
         INSERT INTO ZFLASHCARD VALUES (2, 'Meiosis', 'Cell division producing four genetically unique cells', 1);
         INSERT INTO ZFLASHCARD VALUES (3, 'ATP', 'Adenosine triphosphate -- the energy currency of cells', 1);
         INSERT INTO ZNOTE VALUES (1, 'Lecture 1', NULL);
-        """
-    )
+        """)
     conn.commit()
     conn.close()
     return db
@@ -50,9 +48,7 @@ def tmp_db_with_blobs(tmp_path: Path) -> Path:
     """DB where a flashcard column contains a non-UTF-8 binary blob."""
     db = tmp_path / "Notability_blob.sqlite"
     conn = sqlite3.connect(str(db))
-    conn.execute(
-        "CREATE TABLE ZFLASHCARD (Z_PK INTEGER PRIMARY KEY, ZTERM TEXT, ZDEFINITION BLOB)"
-    )
+    conn.execute("CREATE TABLE ZFLASHCARD (Z_PK INTEGER PRIMARY KEY, ZTERM TEXT, ZDEFINITION BLOB)")
     # Insert a valid text term but a binary (non-UTF-8) definition blob
     conn.execute(
         "INSERT INTO ZFLASHCARD VALUES (?, ?, ?)",

@@ -25,6 +25,7 @@ flashcard front/back content for further inspection.
 import plistlib
 import zipfile
 from pathlib import Path
+from typing import Any
 
 from notability_extractor.utils import get_logger
 
@@ -35,9 +36,16 @@ _TITLE_KEYS = {"title", "noteTitle", "name"}
 
 # Plist keys that may indicate flashcard / study content in the Learn feature
 _FLASHCARD_KEYS = {
-    "term", "definition", "front", "back",
-    "question", "answer", "studySet", "flashcard",
-    "learnItem", "card",
+    "term",
+    "definition",
+    "front",
+    "back",
+    "question",
+    "answer",
+    "studySet",
+    "flashcard",
+    "learnItem",
+    "card",
 }
 
 
@@ -63,23 +71,27 @@ def find_note_files(base: Path) -> list[Path]:
 
 def _parse_plist_bytes(data: bytes, source_label: str) -> object:
     """Deserialise *data* as a binary or XML plist. Returns None on failure."""
+    # plistlib can raise InvalidFileException (subclass of ValueError), OverflowError on
+    # huge integers, or various lower-level decode errors from the XML/binary backends
     try:
         return plistlib.loads(data)
-    except Exception as exc:
+    except (plistlib.InvalidFileException, ValueError, OverflowError, OSError) as exc:
         log.debug("Failed to parse plist from %s: %s", source_label, exc)
         return None
 
 
-def _walk_plist(obj: object, depth: int = 0) -> list[dict]:
+def _walk_plist(obj: object, depth: int = 0) -> list[dict[str, Any]]:
     """
     Recursively walk a deserialised plist object and collect dicts that
     contain keys resembling flashcard front/back pairs.
     """
-    results: list[dict] = []
+    results: list[dict[str, Any]] = []
     if isinstance(obj, dict):
         lower_keys = {k.lower() for k in obj}
         if lower_keys & {fk.lower() for fk in _FLASHCARD_KEYS}:
-            results.append({str(k): v for k, v in obj.items() if isinstance(v, (str, int, float, bool))})
+            results.append(
+                {str(k): v for k, v in obj.items() if isinstance(v, (str, int, float, bool))}
+            )
         for v in obj.values():
             results.extend(_walk_plist(v, depth + 1))
     elif isinstance(obj, list):
@@ -88,7 +100,7 @@ def _walk_plist(obj: object, depth: int = 0) -> list[dict]:
     return results
 
 
-def parse_note_file(note_path: Path) -> dict:
+def parse_note_file(note_path: Path) -> dict[str, Any]:
     """
     Open a .note file (ZIP archive) and extract whatever structured data
     can be read from the plists inside.
@@ -99,7 +111,7 @@ def parse_note_file(note_path: Path) -> dict:
       "flashcards"  -- list of dicts that look like flashcard candidates
       "raw_members" -- list of member filenames found in the ZIP
     """
-    result: dict = {
+    result: dict[str, Any] = {
         "path": note_path,
         "metadata": {},
         "flashcards": [],
@@ -132,7 +144,11 @@ def parse_note_file(note_path: Path) -> dict:
             label = f"{note_path.name}/{member}"
             if "metadata" in member.lower():
                 if isinstance(parsed, dict):
-                    result["metadata"] = {str(k): v for k, v in parsed.items() if isinstance(v, (str, int, float, bool))}
+                    result["metadata"] = {
+                        str(k): v
+                        for k, v in parsed.items()
+                        if isinstance(v, (str, int, float, bool))
+                    }
                     log.debug(
                         "Parsed metadata from %s: title=%s",
                         label,
@@ -156,7 +172,7 @@ def parse_note_file(note_path: Path) -> dict:
     return result
 
 
-def extract_cards_from_notes(note_files: list[Path]) -> list[dict]:
+def extract_cards_from_notes(note_files: list[Path]) -> list[dict[str, Any]]:
     """
     Parse a list of .note files and return front/back card dicts for any
     flashcard-like content found.
@@ -166,16 +182,13 @@ def extract_cards_from_notes(note_files: list[Path]) -> list[dict]:
     ink/text data, not study sets. Inspect the raw plist keys manually
     with --list-tables (SQLite path) or check raw_members output.
     """
-    cards: list[dict] = []
+    cards: list[dict[str, Any]] = []
     for note_path in note_files:
         parsed = parse_note_file(note_path)
         for candidate in parsed["flashcards"]:
             # Map whatever keys we found to front/back
             front = (
-                candidate.get("term")
-                or candidate.get("front")
-                or candidate.get("question")
-                or ""
+                candidate.get("term") or candidate.get("front") or candidate.get("question") or ""
             )
             back = (
                 candidate.get("definition")

@@ -36,7 +36,10 @@ class TestWriteApkg:
         db_path = tmp_path / "collection.anki2"
         db_path.write_bytes(data)
         conn = sqlite3.connect(str(db_path))
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        tables = {
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
         conn.close()
         assert {"cards", "notes", "col"}.issubset(tables)
 

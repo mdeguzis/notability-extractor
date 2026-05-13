@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from notability_extractor.discovery import candidate_dirs, find_db
 
 
@@ -23,9 +21,7 @@ class TestFindDb:
         fake_db = tmp_path / "Notability.sqlite"
         fake_db.touch()
 
-        monkeypatch.setattr(
-            "notability_extractor.discovery._CANDIDATE_DIRS", [str(tmp_path)]
-        )
+        monkeypatch.setattr("notability_extractor.discovery._CANDIDATE_DIRS", [str(tmp_path)])
         result = find_db()
         assert result == fake_db
 
@@ -40,9 +36,7 @@ class TestFindDb:
     def test_ignores_non_sqlite_files(self, tmp_path: Path, monkeypatch):
         (tmp_path / "notes.txt").touch()
         (tmp_path / "data.db").touch()
-        monkeypatch.setattr(
-            "notability_extractor.discovery._CANDIDATE_DIRS", [str(tmp_path)]
-        )
+        monkeypatch.setattr("notability_extractor.discovery._CANDIDATE_DIRS", [str(tmp_path)])
         result = find_db()
         assert result is None
 

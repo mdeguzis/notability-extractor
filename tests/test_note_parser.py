@@ -4,8 +4,6 @@ import plistlib
 import zipfile
 from pathlib import Path
 
-import pytest
-
 from notability_extractor.note_parser import (
     extract_cards_from_notes,
     find_note_files,
@@ -13,12 +11,19 @@ from notability_extractor.note_parser import (
 )
 
 
+# pylint's stdlib stubs don't expose plistlib.FMT_XML (it's a PlistFormat enum
+# member, real at runtime). Disable for the whole helper rather than fight with
+# black's line wrapping moving the directive around.
+# pylint: disable=no-member
 def _make_note_file(path: Path, plists: dict[str, object]) -> Path:
     """Helper: write a .note ZIP with the given plist member files."""
     with zipfile.ZipFile(str(path), "w") as zf:
         for member_name, data in plists.items():
             zf.writestr(member_name, plistlib.dumps(data, fmt=plistlib.FMT_XML))
     return path
+
+
+# pylint: enable=no-member
 
 
 class TestFindNoteFiles:
@@ -57,11 +62,7 @@ class TestParseNoteFile:
         note = tmp_path / "test.note"
         _make_note_file(
             note,
-            {
-                "Session.plist": [
-                    {"term": "Mitosis", "definition": "Cell division"}
-                ]
-            },
+            {"Session.plist": [{"term": "Mitosis", "definition": "Cell division"}]},
         )
         result = parse_note_file(note)
         assert len(result["flashcards"]) >= 1
@@ -78,8 +79,8 @@ class TestParseNoteFile:
         note = tmp_path / "broken.note"
         note.write_bytes(b"this is not a zip file")
         result = parse_note_file(note)
-        assert result["flashcards"] == []
-        assert result["metadata"] == {}
+        assert not result["flashcards"]
+        assert not result["metadata"]
 
     def test_returns_path_in_result(self, tmp_path: Path):
         note = tmp_path / "test.note"
@@ -104,7 +105,7 @@ class TestExtractCardsFromNotes:
         note = tmp_path / "test.note"
         _make_note_file(note, {"metadata.plist": {"title": "Notes"}})
         cards = extract_cards_from_notes([note])
-        assert cards == []
+        assert not cards
 
     def test_handles_multiple_note_files(self, tmp_path: Path):
         for i, (term, defn) in enumerate([("A", "1"), ("B", "2")]):
@@ -115,4 +116,4 @@ class TestExtractCardsFromNotes:
         assert len(cards) == 2
 
     def test_empty_input(self):
-        assert extract_cards_from_notes([]) == []
+        assert not extract_cards_from_notes([])

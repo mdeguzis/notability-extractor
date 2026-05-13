@@ -42,9 +42,7 @@ def find_db(hint: str | None = None) -> Path | None:
         if p.is_file():
             log.info("Using user-supplied DB path: %s", p)
             return p
-        log.error(
-            "Supplied DB path does not exist: %s -- check the path and try again.", p
-        )
+        log.error("Supplied DB path does not exist: %s -- check the path and try again.", p)
         return None
 
     for raw in _CANDIDATE_DIRS:
@@ -87,7 +85,7 @@ def find_note_dirs() -> list[Path]:
 
     Used by note_parser.find_note_files() to locate .note archives.
     """
-    found = []
+    found: list[Path] = []
     for raw in _CANDIDATE_DIRS:
         p = Path(raw).expanduser()
         if p.exists():

@@ -2,6 +2,7 @@
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from notability_extractor.utils import get_logger
 
@@ -37,15 +38,13 @@ def list_tables(conn: sqlite3.Connection) -> list[str]:
     return names
 
 
-def describe_table(conn: sqlite3.Connection, table: str) -> list[dict]:
+def describe_table(conn: sqlite3.Connection, table: str) -> list[dict[str, Any]]:
     """Return PRAGMA table_info rows as plain dicts."""
     rows = conn.execute(f"PRAGMA table_info('{table}')").fetchall()
     return [dict(r) for r in rows]
 
 
-def sample_rows(
-    conn: sqlite3.Connection, table: str, limit: int = 5
-) -> list[sqlite3.Row]:
+def sample_rows(conn: sqlite3.Connection, table: str, limit: int = 5) -> list[sqlite3.Row]:
     """Fetch up to *limit* rows from *table* for inspection."""
     return conn.execute(f"SELECT * FROM '{table}' LIMIT {limit}").fetchall()
 
@@ -56,12 +55,8 @@ def find_flashcard_tables(tables: list[str]) -> list[str]:
 
     The match is case-insensitive substring search against FLASHCARD_TABLE_HINTS.
     """
-    matches = [
-        t for t in tables if any(hint in t.lower() for hint in FLASHCARD_TABLE_HINTS)
-    ]
-    log.debug(
-        "Flashcard-candidate tables: %s  (hints: %s)", matches, FLASHCARD_TABLE_HINTS
-    )
+    matches = [t for t in tables if any(hint in t.lower() for hint in FLASHCARD_TABLE_HINTS)]
+    log.debug("Flashcard-candidate tables: %s  (hints: %s)", matches, FLASHCARD_TABLE_HINTS)
     return matches
 
 
