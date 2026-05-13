@@ -67,6 +67,9 @@ Examples:
 
   # Verbose debug output
   notability-extractor --verbose
+
+  # Linux: scan an arbitrary directory containing Notability data
+  notability-extractor --path ~/notability_backup
 """,
     )
 
@@ -75,6 +78,14 @@ Examples:
         "--db",
         metavar="PATH",
         help="Path to the Notability .sqlite file (auto-discovered if omitted).",
+    )
+    parser.add_argument(
+        "--path",
+        metavar="DIR",
+        help=(
+            "Search this directory instead of the macOS data dirs. "
+            "Useful when testing on Linux or pointing at a backup."
+        ),
     )
     parser.add_argument(
         "--out",
@@ -120,18 +131,15 @@ Examples:
 
 def _run_note_mode(args: argparse.Namespace) -> list[dict[str, Any]]:
     """Extract cards from .note file archives."""
-    # args is reserved for the upcoming --path override that lets you point at
-    # an alternate data dir (handy on Linux). Keep the signature symmetric with
-    # _run_sqlite_mode so the ternary in main() stays clean.
-    _ = args
-    note_dirs = find_note_dirs()
+    override = Path(args.path).expanduser() if args.path else None
+    note_dirs = find_note_dirs(override=override)
     if not note_dirs:
         log.error(
             "No Notability data directories found on this machine.\n"
             "  Expected one of:\n"
             "    ~/Library/Group Containers/com.gingerlabs.Notability/\n"
             "    ~/Library/Containers/com.gingerlabs.Notability/...\n"
-            "  Make sure Notability is installed on this Mac and has synced at least once."
+            "  Or pass --path <dir> to point at an alternate location."
         )
         sys.exit(1)
 
@@ -141,8 +149,9 @@ def _run_note_mode(args: argparse.Namespace) -> list[dict[str, Any]]:
 
     if not note_files:
         log.error(
-            "No .note files found under the Notability data directories.\n"
-            "  If notes exist only on iPad/iPhone, enable iCloud sync on macOS first."
+            "No .note files found under: %s\n"
+            "  If notes exist only on iPad/iPhone, enable iCloud sync first.",
+            ", ".join(str(d) for d in note_dirs),
         )
         sys.exit(1)
 
@@ -159,7 +168,8 @@ def _run_sqlite_mode(args: argparse.Namespace) -> list[dict[str, Any]]:
         "  Reference: https://jvns.ca/blog/2018/03/31/reverse-engineering-notability-format/"
     )
 
-    db_path = find_db(args.db)
+    search_root = Path(args.path).expanduser() if args.path else None
+    db_path = find_db(hint=args.db, search_root=search_root)
     if db_path is None:
         sys.exit(1)
 

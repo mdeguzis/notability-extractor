@@ -31,6 +31,9 @@ make install
 
 Then:
 
+**Linux / non-macOS users:** pass `--path /some/dir` to scan an arbitrary
+directory instead of the macOS search roots.
+
 ```bash
 # Auto-discover DB and export
 notability-extractor
@@ -43,6 +46,9 @@ notability-extractor --list-tables
 
 # Target a specific table and custom output path
 notability-extractor --table ZFLASHCARD --out my_deck.apkg --deck-name "Biology 101"
+
+# Linux or non-macOS: scan an arbitrary directory containing Notability data
+notability-extractor --path ~/notability_backup
 ```
 
 ## Caveats: BLOBs and Protobufs

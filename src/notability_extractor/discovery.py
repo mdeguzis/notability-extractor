@@ -27,16 +27,21 @@ _CANDIDATE_DIRS: list[str] = [
 ]
 
 
-def find_db(hint: str | None = None) -> Path | None:
+def find_db(
+    hint: str | None = None,
+    search_root: Path | None = None,
+) -> Path | None:
     """
-    Return the path to the Notability SQLite database.
+    Return the path to a Notability SQLite database.
 
-    If *hint* is given it is used directly (after expanding ~).
-    Otherwise the function searches the known macOS candidate directories
-    and returns the first .sqlite file found.
+    Precedence (most specific first):
+      1. *hint* (from --db): the explicit file path if it exists
+      2. *search_root* (from --path): the override directory to rglob
+      3. The macOS candidate dirs
 
     Returns None and logs a helpful message when nothing is found.
     """
+    # --db (hint) always wins when given
     if hint:
         p = Path(hint).expanduser()
         if p.is_file():
@@ -45,8 +50,22 @@ def find_db(hint: str | None = None) -> Path | None:
         log.error("Supplied DB path does not exist: %s -- check the path and try again.", p)
         return None
 
-    for raw in _CANDIDATE_DIRS:
-        base = Path(raw).expanduser()
+    # --path (search_root) replaces the macOS dirs when given
+    if search_root is not None:
+        if not search_root.exists():
+            log.error(
+                "--path '%s' does not exist - check the path and try again",
+                search_root,
+            )
+            return None
+        if not search_root.is_dir():
+            log.error("--path '%s' is a file, expected a directory", search_root)
+            return None
+        search_dirs: list[Path] = [search_root]
+    else:
+        search_dirs = [Path(raw).expanduser() for raw in _CANDIDATE_DIRS]
+
+    for base in search_dirs:
         if not base.exists():
             log.debug("Candidate directory not present: %s", base)
             continue
@@ -70,21 +89,44 @@ def find_db(hint: str | None = None) -> Path | None:
 
         log.debug("No .sqlite files found under: %s", base)
 
-    log.warning(
-        "No Notability SQLite database found in standard macOS paths.\n"
-        "  Searched:\n%s\n"
-        "  Tip: pass --db <path> to specify the file manually.",
-        "\n".join(f"    {p}" for p in _CANDIDATE_DIRS),
-    )
+    if search_root is not None:
+        log.warning(
+            "No .sqlite files found under '%s' - try --mode note or pass --db explicitly.",
+            search_root,
+        )
+    else:
+        log.warning(
+            "No Notability SQLite database found in standard macOS paths.\n"
+            "  Searched:\n%s\n"
+            "  Tip: pass --db <path> or --path <dir> to specify the location.",
+            "\n".join(f"    {p}" for p in _CANDIDATE_DIRS),
+        )
     return None
 
 
-def find_note_dirs() -> list[Path]:
+def find_note_dirs(override: Path | None = None) -> list[Path]:
     """
     Return candidate base directories that exist on this machine.
 
+    If *override* is given it replaces the macOS candidate dirs entirely.
+    Returns [] when the override path is missing or not a directory; the
+    caller is responsible for the user-facing exit.
+
     Used by note_parser.find_note_files() to locate .note archives.
     """
+    if override is not None:
+        if not override.exists():
+            log.error(
+                "--path '%s' does not exist - check the path and try again",
+                override,
+            )
+            return []
+        if not override.is_dir():
+            log.error("--path '%s' is a file, expected a directory", override)
+            return []
+        log.info("Using --path override: %s", override)
+        return [override]
+
     found: list[Path] = []
     for raw in _CANDIDATE_DIRS:
         p = Path(raw).expanduser()

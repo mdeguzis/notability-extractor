@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from notability_extractor.discovery import candidate_dirs, find_db
+from notability_extractor.discovery import candidate_dirs, find_db, find_note_dirs
 
 
 class TestFindDb:
@@ -65,3 +65,46 @@ class TestCandidateDirs:
 
     def test_not_empty(self):
         assert len(candidate_dirs()) > 0
+
+
+class TestFindNoteDirsOverride:
+    def test_override_returns_only_override(self, tmp_path: Path):
+        # tmp_path exists and is a directory, so it should be returned as-is
+        result = find_note_dirs(override=tmp_path)
+        assert result == [tmp_path]
+
+    def test_missing_override_returns_empty(self, tmp_path: Path):
+        bad = tmp_path / "does_not_exist"
+        result = find_note_dirs(override=bad)
+        assert not result
+
+    def test_file_as_override_returns_empty(self, tmp_path: Path):
+        # passing a file instead of a directory should be rejected
+        f = tmp_path / "a_file.txt"
+        f.touch()
+        result = find_note_dirs(override=f)
+        assert not result
+
+
+class TestFindDbSearchRoot:
+    def test_search_root_finds_sqlite_inside(self, tmp_path: Path):
+        # drop a .sqlite file under tmp_path and confirm it gets found
+        db = tmp_path / "notes.sqlite"
+        db.touch()
+        result = find_db(hint=None, search_root=tmp_path)
+        assert result == db
+
+    def test_hint_wins_over_search_root(self, tmp_path: Path):
+        # when both are given, the explicit --db (hint) takes precedence
+        hint_db = tmp_path / "explicit.sqlite"
+        hint_db.touch()
+        root_db = tmp_path / "subdir"
+        root_db.mkdir()
+        (root_db / "other.sqlite").touch()
+        result = find_db(hint=str(hint_db), search_root=root_db)
+        assert result == hint_db
+
+    def test_missing_search_root_returns_none(self, tmp_path: Path):
+        bad = tmp_path / "nope"
+        result = find_db(hint=None, search_root=bad)
+        assert result is None
