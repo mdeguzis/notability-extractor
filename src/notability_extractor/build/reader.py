@@ -1,7 +1,7 @@
 """Read an export directory into a Deck object."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from notability_extractor.model import Card, Deck, NoteText, Summary
@@ -27,7 +27,7 @@ def read_export_dir(
     )
     return Deck(
         name=deck_name,
-        generated_at=datetime.now(timezone.utc),
+        generated_at=datetime.now(UTC),
         cards=cards,
         summaries=summaries,
         notes=notes,

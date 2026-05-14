@@ -1,86 +1,121 @@
 # notability-extractor
 
-Extract flashcards from Notability's local SQLite database and export them as an Anki `.apkg` deck.
+Extract Notability Learn content (AI-generated quizzes, summaries, and OCR'd
+note text) and export it as an Anki `.apkg` deck, JSON, or Markdown for review.
 
-## Requirements
+## How it works
 
-- Python 3.11+
-- No third-party packages required (stdlib only)
+Notability Learn generates quizzes via Claude Haiku and summaries via Gemini
+2.5 Flash, server-side. Both get cached locally in the app's HTTP cache.
+Handwriting OCR and PDF text live inside `.nbn` note bundles.
 
-## Where is the database? (macOS)
+The tool runs in two phases:
 
-Notability stores its data in one of these locations:
+1. **Extract** (macOS only): walks the iCloud Drive `.nbn` bundles and the
+   HTTP cache (`Cache.db` + `fsCachedData/`), writes a normalized export
+   directory at `~/notability_export/`.
+2. **Build** (any OS): reads the export directory and emits three outputs:
+   `.apkg` for Anki, `.json` for programmatic review, `.md` for human reading.
 
-```
-~/Library/Group Containers/com.gingerlabs.Notability/
-~/Library/Containers/com.gingerlabs.Notability/Data/Library/Application Support/
-```
+Linux and Windows machines can skip phase 1 by pointing `--export-dir` at a
+directory produced on a Mac. Useful if you want to do the Anki packaging on a
+different machine than the one Notability runs on.
 
-The script auto-discovers any `.sqlite` file under these directories. If your Mac has
-iCloud sync enabled, these files are present even if the iPad is the primary device.
+## Install
 
-**iPadOS note:** The sandbox prevents direct access without a jailbreak. Use macOS.
-
-## Usage
-
-First install. This sets up the dev environment in `.venv/` and drops the
-`notability-extractor` console script into `~/.local/bin/` so it's runnable from
-any shell (assuming `~/.local/bin` is on your `PATH`):
+From PyPI:
 
 ```bash
+pip install notability-extractor
+# or with uv:
+uv tool install notability-extractor
+```
+
+From source (for development):
+
+```bash
+git clone https://github.com/mdeguzis/notability-extractor.git
+cd notability-extractor
 make install
 ```
 
-The install is editable, so source changes are picked up right away without
-re-running `make install`. To remove the binary later: `uv tool uninstall
-notability-extractor`.
+`make install` sets up `.venv/` for dev work and drops the
+`notability-extractor` console script into `~/.local/bin/` so it's runnable
+from any shell.
 
-Then:
-
-**Linux / non-macOS users:** pass `--path /some/dir` to scan an arbitrary
-directory instead of the macOS search roots.
+## Usage
 
 ```bash
-# Auto-discover DB and export
+# macOS: auto-extract and build all three outputs in the current dir
 notability-extractor
 
-# Specify DB explicitly
-notability-extractor --db ~/Library/Group\ Containers/com.gingerlabs.Notability/Notability.sqlite
+# Anywhere: build from a pre-extracted directory
+notability-extractor --export-dir ~/notability_export
 
-# Inspect tables first (useful when DB schema is unknown)
-notability-extractor --list-tables
+# JSON output only, custom directory
+notability-extractor --export-dir ~/notability_export --format json --out-dir ./decks
 
-# Target a specific table and custom output path
-notability-extractor --table ZFLASHCARD --out my_deck.apkg --deck-name "Biology 101"
+# macOS: just run phase 1 (produce export dir, no .apkg/json/md)
+notability-extractor --extract-only
 
-# Linux or non-macOS: scan an arbitrary directory containing Notability data
-notability-extractor --path ~/notability_backup
+# Custom Anki deck name (only affects what shows up inside Anki)
+notability-extractor --deck-name "Biology 101"
 ```
 
-## Caveats: BLOBs and Protobufs
+Output filenames are fixed:
 
-Notability sometimes stores flashcard text as binary BLOBs or Protocol Buffers rather
-than plain text columns. The extractor will flag these columns in the log output:
-
-```
-WARNING: Column ZDATA contains non-UTF-8 binary data -- likely protobuf or nbn blob
-```
-
-If you hit this, the `.nbn` note files (stored alongside the `.sqlite`) are the next
-place to look. They are renamed `.zip` archives containing binary metadata. A future
-version of this tool may add protobuf decoding support.
+| File | Contents |
+|---|---|
+| `notability_flashcards.apkg` | Anki deck (quiz questions only) |
+| `notability_flashcards.json` | Full structured dump for programmatic review |
+| `notability_flashcards.md` | Human-readable cards + summaries + note transcripts |
 
 ## Importing into Anki
 
 1. Open Anki on your desktop.
 2. `File > Import` and select the generated `.apkg` file.
-3. The deck will appear as "Notability Flashcards" (or whatever you passed to `--deck-name`).
+3. The deck appears as "Notability Flashcards" (or whatever you passed to
+   `--deck-name`).
 
-## Troubleshooting
+## Caveats
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| No DB found | Not on macOS, or iCloud hasn't synced | Pass `--db` explicitly |
-| No flashcard tables | Different Notability version | Use `--list-tables` to inspect |
-| All backs are empty | Content in BLOB columns | Check WARNING logs; protobuf decode needed |
-| Import error in Anki | Anki version mismatch | Open a GitHub issue with your Anki version |
+- The Learn cache only contains content from sessions you've actively opened
+  in Notability. If a note has never had Learn run on it, no quiz is cached.
+- Notability does not provide a stable export API. The tool reads on-disk
+  formats that could change between app versions. If extraction breaks after
+  a Notability update, open an issue.
+- iPadOS-only setups need iCloud Drive sync enabled so the `.nbn` bundles and
+  cache files are present on a Mac. Without sync, you'd need physical access
+  to the iPad's sandbox (not currently supported).
+
+## Releasing
+
+Releases are automated via GitHub Actions. To cut a new release:
+
+1. Bump the `version = "X.Y.Z"` line in `pyproject.toml`
+2. Commit and push to `main`
+3. CI runs: tests pass -> autotag creates `vX.Y.Z` -> build produces wheel
+   and sdist -> GitHub Release is created -> PyPI publishes via OIDC
+   trusted publishing
+
+No manual tag step. No API tokens in CI.
+
+### One-time PyPI setup
+
+(Skip this if the package is already on PyPI with OIDC configured.)
+
+1. First upload manually with `./upload-to-pypi.sh` (needs `~/.pypirc` with
+   a PyPI API token) to claim the package name.
+2. On PyPI: project settings -> Publishing -> add trusted publisher with
+   repo `mdeguzis/notability-extractor`, workflow `ci.yml`, environment
+   `pypi`.
+3. On GitHub: repo settings -> Environments -> create `pypi` environment.
+
+### Manual ad-hoc upload
+
+Only needed if CI is broken:
+
+```bash
+./upload-to-pypi.sh --test   # TestPyPI dry-run first
+./upload-to-pypi.sh          # then prod PyPI
+```
