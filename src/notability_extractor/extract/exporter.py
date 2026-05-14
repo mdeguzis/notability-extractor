@@ -9,15 +9,15 @@ from notability_extractor.utils import get_logger
 log = get_logger(__name__)
 
 
-def run_extract(notes_dir: Path, cache_dir: Path, export_dir: Path) -> None:
-    """Walk a notes directory and an HTTP cache, populate export_dir.
+def run_extract(notes_dir: Path, cache_dir: Path, output_dir: Path) -> None:
+    """Walk a notes directory and an HTTP cache, populate output_dir.
 
     notes_dir   - parent of *.nbn bundles (typically iCloud Drive location)
     cache_dir   - parent of Cache.db and fsCachedData/ (sandbox container)
-    export_dir  - where to write the export
+    output_dir  - where to write the extracted data
     """
-    export_dir.mkdir(parents=True, exist_ok=True)
-    raw_pdfs_dir = export_dir / "raw_pdfs"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    raw_pdfs_dir = output_dir / "raw_pdfs"
     raw_pdfs_dir.mkdir(exist_ok=True)
 
     note_count = 0
@@ -25,13 +25,13 @@ def run_extract(notes_dir: Path, cache_dir: Path, export_dir: Path) -> None:
         for bundle in sorted(notes_dir.glob("*.nbn")):
             if not bundle.is_dir():
                 continue
-            out_text = export_dir / f"{bundle.stem}.txt"
+            out_text = output_dir / f"{bundle.stem}.txt"
             extract_nbn(bundle, out_text, raw_pdfs_dir)
             note_count += 1
     else:
         log.warning("Notes dir not found: %s", notes_dir)
 
-    learn_out = export_dir / "learn"
+    learn_out = output_dir / "learn"
     cache_db = cache_dir / "Cache.db"
     fs_cache = cache_dir / "fsCachedData"
     quiz_count, summary_count = extract_learn_content(cache_db, fs_cache, learn_out)
@@ -41,5 +41,5 @@ def run_extract(notes_dir: Path, cache_dir: Path, export_dir: Path) -> None:
         note_count,
         quiz_count,
         summary_count,
-        export_dir,
+        output_dir,
     )

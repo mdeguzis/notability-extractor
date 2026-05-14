@@ -5,11 +5,11 @@ Entry point: notability-extractor (registered via pyproject.toml)
 Also runnable as: python -m notability_extractor
 
 Two phases:
-  1. extract   - read .nbn bundles + HTTP cache (macOS only), write export dir
-  2. build     - read export dir, write .apkg / .json / .md outputs
+  1. extract   - read .nbn bundles + HTTP cache (macOS only), produce input dir
+  2. build     - read input dir, write .apkg / .json / .md outputs
 
 On macOS, running with no flags does both phases. On Linux/Windows, you must
-provide --export-dir pointing at a pre-extracted dir.
+provide --input-dir pointing at a pre-extracted dir.
 """
 
 import argparse
@@ -20,11 +20,11 @@ from notability_extractor import __version__
 from notability_extractor.build.apkg_writer import write_apkg_deck
 from notability_extractor.build.json_writer import write_json_deck
 from notability_extractor.build.md_writer import write_md_deck
-from notability_extractor.build.reader import read_export_dir
+from notability_extractor.build.reader import read_input_dir
 from notability_extractor.extract.exporter import run_extract
 from notability_extractor.extract.platform_check import (
     default_cache_dir,
-    default_export_dir,
+    default_input_dir,
     default_notes_dir,
     is_macos,
 )
@@ -47,19 +47,19 @@ Examples:
   # macOS: auto-extract and build all three outputs to current dir
   notability-extractor
 
-  # Anywhere: build from a pre-extracted dir
-  notability-extractor --export-dir ~/notability_export
+  # Anywhere: build from a pre-extracted input dir
+  notability-extractor --input-dir ~/notability_export
 
   # JSON only, custom output directory
-  notability-extractor --export-dir ~/notability_export --format json --out-dir ./decks
+  notability-extractor --input-dir ~/notability_export --format json --out-dir ./decks
 
-  # macOS: just produce the export dir, don't build anything
+  # macOS: just produce the input dir, don't build anything
   notability-extractor --extract-only
 """,
     )
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     p.add_argument(
-        "--export-dir",
+        "--input-dir",
         metavar="DIR",
         help="Use a pre-extracted dir instead of running phase 1 (required on non-macOS).",
     )
@@ -88,16 +88,6 @@ Examples:
         help="Anki deck name (inside the .apkg). Default: 'Notability Flashcards'.",
     )
     p.add_argument(
-        "--notes-dir",
-        metavar="DIR",
-        help="Override iCloud notes dir (macOS extract only).",
-    )
-    p.add_argument(
-        "--cache-dir",
-        metavar="DIR",
-        help="Override HTTP cache dir (macOS extract only).",
-    )
-    p.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -114,22 +104,20 @@ def main() -> None:
     if args.extract_only and not is_macos():
         log.error("--extract-only is only available on macOS")
         sys.exit(1)
-    if args.export_dir is None and not is_macos():
+    if args.input_dir is None and not is_macos():
         log.error(
-            "This command needs --export-dir on non-macOS. Phase 1 extraction "
+            "This command needs --input-dir on non-macOS. Phase 1 extraction "
             "requires Notability data that only exists on Macs. Provide a "
             "pre-extracted directory (run on a Mac first, then transfer)."
         )
         sys.exit(1)
 
-    # phase 1: extract
-    if args.export_dir:
-        export_dir = Path(args.export_dir).expanduser()
+    # phase 1: extract (auto-discovers macOS paths, no user knobs)
+    if args.input_dir:
+        input_dir = Path(args.input_dir).expanduser()
     else:
-        export_dir = default_export_dir()
-        notes = Path(args.notes_dir).expanduser() if args.notes_dir else default_notes_dir()
-        cache = Path(args.cache_dir).expanduser() if args.cache_dir else default_cache_dir()
-        run_extract(notes, cache, export_dir)
+        input_dir = default_input_dir()
+        run_extract(default_notes_dir(), default_cache_dir(), input_dir)
 
     if args.extract_only:
         return
@@ -142,7 +130,7 @@ def main() -> None:
             sys.exit(1)
 
     # phase 2: build
-    deck = read_export_dir(export_dir, deck_name=args.deck_name)
+    deck = read_input_dir(input_dir, deck_name=args.deck_name)
     log.info(
         "Loaded deck: %d cards, %d summaries, %d notes",
         len(deck.cards),

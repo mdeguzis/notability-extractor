@@ -19,24 +19,24 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
     )
 
 
-def test_help_lists_export_dir():
+def test_help_lists_input_dir():
     r = _run(["--help"])
     assert r.returncode == 0
-    assert "--export-dir" in r.stdout
+    assert "--input-dir" in r.stdout
 
 
 @pytest.mark.skipif(sys.platform == "darwin", reason="on macOS the no-args case runs phase 1")
 def test_no_args_on_linux_errors_with_helpful_message():
     r = _run([])
     assert r.returncode != 0
-    assert "export-dir" in (r.stderr + r.stdout).lower()
+    assert "input-dir" in (r.stderr + r.stdout).lower()
 
 
 @pytest.mark.skipif(not FIXTURE.is_dir(), reason="test fixture not present")
 def test_build_from_fixture_writes_all_three_formats(tmp_path: Path):
     r = _run(
         [
-            "--export-dir",
+            "--input-dir",
             str(FIXTURE),
             "--out-dir",
             str(tmp_path),
@@ -52,7 +52,7 @@ def test_build_from_fixture_writes_all_three_formats(tmp_path: Path):
 def test_format_filter_writes_only_json(tmp_path: Path):
     r = _run(
         [
-            "--export-dir",
+            "--input-dir",
             str(FIXTURE),
             "--out-dir",
             str(tmp_path),
@@ -70,7 +70,7 @@ def test_format_filter_writes_only_json(tmp_path: Path):
 def test_json_output_round_trips(tmp_path: Path):
     _run(
         [
-            "--export-dir",
+            "--input-dir",
             str(FIXTURE),
             "--out-dir",
             str(tmp_path),

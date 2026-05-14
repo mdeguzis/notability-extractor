@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from notability_extractor.extract.platform_check import (
     default_cache_dir,
-    default_export_dir,
+    default_input_dir,
     default_notes_dir,
     is_macos,
 )
@@ -25,8 +25,8 @@ def test_default_cache_dir_under_containers():
     assert "Containers/com.gingerlabs.Notability" in str(p)
 
 
-def test_default_export_dir_in_home():
-    p = default_export_dir()
+def test_default_input_dir_in_home():
+    p = default_input_dir()
     assert p == Path.home() / "notability_export"
 
 

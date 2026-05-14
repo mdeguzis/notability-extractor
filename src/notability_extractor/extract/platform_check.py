@@ -30,6 +30,6 @@ def default_cache_dir() -> Path:
     )
 
 
-def default_export_dir() -> Path:
-    """Where phase 1 writes its output if --export-dir isn't given."""
+def default_input_dir() -> Path:
+    """Default location for the build phase's input dir (also phase 1's output)."""
     return Path.home() / "notability_export"

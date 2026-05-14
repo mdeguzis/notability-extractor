@@ -1,4 +1,4 @@
-"""Read an export directory into a Deck object."""
+"""Read an input directory into a Deck object."""
 
 import json
 from datetime import UTC, datetime
@@ -10,17 +10,17 @@ from notability_extractor.utils import get_logger
 log = get_logger(__name__)
 
 
-def read_export_dir(
-    export_dir: Path,
+def read_input_dir(
+    input_dir: Path,
     deck_name: str = "Notability Flashcards",
 ) -> Deck:
-    """Walk export_dir and produce a Deck."""
-    cards = _read_quizzes(export_dir / "learn" / "quizzes")
-    summaries = _read_summaries(export_dir / "learn" / "summaries")
-    notes = _read_notes(export_dir)
+    """Walk input_dir and produce a Deck."""
+    cards = _read_quizzes(input_dir / "learn" / "quizzes")
+    summaries = _read_summaries(input_dir / "learn" / "summaries")
+    notes = _read_notes(input_dir)
     log.debug(
-        "Loaded export dir %s: %d cards, %d summaries, %d notes",
-        export_dir,
+        "Loaded input dir %s: %d cards, %d summaries, %d notes",
+        input_dir,
         len(cards),
         len(summaries),
         len(notes),

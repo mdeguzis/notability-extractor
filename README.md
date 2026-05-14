@@ -17,7 +17,7 @@ The tool runs in two phases:
 2. **Build** (any OS): reads the export directory and emits three outputs:
    `.apkg` for Anki, `.json` for programmatic review, `.md` for human reading.
 
-Linux and Windows machines can skip phase 1 by pointing `--export-dir` at a
+Linux and Windows machines can skip phase 1 by pointing `--input-dir` at a
 directory produced on a Mac. Useful if you want to do the Anki packaging on a
 different machine than the one Notability runs on.
 
@@ -50,10 +50,10 @@ from any shell.
 notability-extractor
 
 # Anywhere: build from a pre-extracted directory
-notability-extractor --export-dir ~/notability_export
+notability-extractor --input-dir ~/notability_export
 
 # JSON output only, custom directory
-notability-extractor --export-dir ~/notability_export --format json --out-dir ./decks
+notability-extractor --input-dir ~/notability_export --format json --out-dir ./decks
 
 # macOS: just run phase 1 (produce export dir, no .apkg/json/md)
 notability-extractor --extract-only
