@@ -4,241 +4,164 @@ Command-line interface for notability-extractor.
 Entry point: notability-extractor (registered via pyproject.toml)
 Also runnable as: python -m notability_extractor
 
-TWO EXTRACTION MODES
---------------------
-1. --mode sqlite (default fallback)
-   Searches for a .sqlite index file in Notability's data directories.
-   NOTE: Confirmed research shows Notability does NOT store note CONTENT
-   in SQLite. A .sqlite file may exist as an index/settings DB, but
-   flashcard text will more likely be in .note archives. Use this mode
-   to inspect whatever SQLite is found with --list-tables first.
+Two phases:
+  1. extract   - read .nbn bundles + HTTP cache (macOS only), write export dir
+  2. build     - read export dir, write .apkg / .json / .md outputs
 
-2. --mode note (recommended for note content)
-   Scans for .note files (ZIP archives + binary plists) -- the confirmed
-   Notability storage format. Best-effort plist walking surfaces any
-   flashcard/study-set keys found in the Learn feature data.
-
-Reference:
-  https://jvns.ca/blog/2018/03/31/reverse-engineering-notability-format/
+On macOS, running with no flags does both phases. On Linux/Windows, you must
+provide --export-dir pointing at a pre-extracted dir.
 """
 
 import argparse
 import sys
 from pathlib import Path
-from typing import Any
 
 from notability_extractor import __version__
-from notability_extractor.anki import write_apkg
-from notability_extractor.db import (
-    find_flashcard_tables,
-    list_tables,
-    open_db,
-    print_schema,
+from notability_extractor.build.apkg_writer import write_apkg_deck
+from notability_extractor.build.json_writer import write_json_deck
+from notability_extractor.build.md_writer import write_md_deck
+from notability_extractor.build.reader import read_export_dir
+from notability_extractor.extract.exporter import run_extract
+from notability_extractor.extract.platform_check import (
+    default_cache_dir,
+    default_export_dir,
+    default_notes_dir,
+    is_macos,
 )
-from notability_extractor.discovery import find_db, find_note_dirs
-from notability_extractor.extractor import extract_cards
-from notability_extractor.note_parser import extract_cards_from_notes, find_note_files
 from notability_extractor.utils import configure_logging, get_logger
 
 log = get_logger(__name__)
+_FORMATS = ("apkg", "json", "md")
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    p = argparse.ArgumentParser(
         prog="notability-extractor",
         description=(
-            "Extract flashcards from a Notability SQLite database "
-            "and export them as an Anki .apkg deck."
+            "Extract Notability Learn content (quizzes, summaries, OCR) and "
+            "export as an Anki deck, JSON, or Markdown."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Auto-discover DB on macOS and write default output file
+  # macOS: auto-extract and build all three outputs to current dir
   notability-extractor
 
-  # Specify the DB manually
-  notability-extractor --db ~/Library/Group\\ Containers/com.gingerlabs.Notability/Notability.sqlite
+  # Anywhere: build from a pre-extracted dir
+  notability-extractor --export-dir ~/notability_export
 
-  # See what tables exist before extracting
-  notability-extractor --list-tables
+  # JSON only, custom output directory
+  notability-extractor --export-dir ~/notability_export --format json --out-dir ./decks
 
-  # Target a specific table and output path
-  notability-extractor --table ZFLASHCARD --out biology.apkg --deck-name "Biology 101"
-
-  # Verbose debug output
-  notability-extractor --verbose
-
-  # Linux: scan an arbitrary directory containing Notability data
-  notability-extractor --path ~/notability_backup
+  # macOS: just produce the export dir, don't build anything
+  notability-extractor --extract-only
 """,
     )
-
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    parser.add_argument(
-        "--db",
-        metavar="PATH",
-        help="Path to the Notability .sqlite file (auto-discovered if omitted).",
-    )
-    parser.add_argument(
-        "--path",
+    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    p.add_argument(
+        "--export-dir",
         metavar="DIR",
+        help="Use a pre-extracted dir instead of running phase 1 (required on non-macOS).",
+    )
+    p.add_argument(
+        "--extract-only",
+        action="store_true",
+        help="Run phase 1 only (macOS only).",
+    )
+    p.add_argument(
+        "--format",
+        default="apkg,json,md",
+        help="Comma-separated output formats. Choices: apkg, json, md. Default: all three.",
+    )
+    p.add_argument(
+        "--out-dir",
+        metavar="DIR",
+        default=".",
         help=(
-            "Search this directory instead of the macOS data dirs. "
-            "Useful when testing on Linux or pointing at a backup."
+            "Where to write outputs. Default: current dir. Filenames are fixed: "
+            "notability_flashcards.{apkg,json,md}."
         ),
     )
-    parser.add_argument(
-        "--out",
-        metavar="FILE",
-        default="notability_flashcards.apkg",
-        help="Output .apkg path (default: notability_flashcards.apkg).",
-    )
-    parser.add_argument(
+    p.add_argument(
         "--deck-name",
         default="Notability Flashcards",
-        metavar="NAME",
-        help="Anki deck name (default: 'Notability Flashcards').",
+        help="Anki deck name (inside the .apkg). Default: 'Notability Flashcards'.",
     )
-    parser.add_argument(
-        "--list-tables",
-        action="store_true",
-        help="Print all tables and their columns, then exit.",
+    p.add_argument(
+        "--notes-dir",
+        metavar="DIR",
+        help="Override iCloud notes dir (macOS extract only).",
     )
-    parser.add_argument(
-        "--table",
-        metavar="NAME",
-        help="Extract from this specific table instead of auto-detecting.",
+    p.add_argument(
+        "--cache-dir",
+        metavar="DIR",
+        help="Override HTTP cache dir (macOS extract only).",
     )
-    parser.add_argument(
-        "--mode",
-        choices=["note", "sqlite"],
-        default="note",
-        help=(
-            "Extraction mode: 'note' parses .note ZIP archives (confirmed Notability format); "
-            "'sqlite' searches for a .sqlite index DB (experimental -- flashcard content is "
-            "unlikely to be there). Default: note."
-        ),
-    )
-    parser.add_argument(
+    p.add_argument(
         "--verbose",
         "-v",
         action="store_true",
         help="Enable DEBUG-level logging.",
     )
-
-    return parser
-
-
-def _run_note_mode(args: argparse.Namespace) -> list[dict[str, Any]]:
-    """Extract cards from .note file archives."""
-    override = Path(args.path).expanduser() if args.path else None
-    note_dirs = find_note_dirs(override=override)
-    if not note_dirs:
-        log.error(
-            "No Notability data directories found on this machine.\n"
-            "  Expected one of:\n"
-            "    ~/Library/Group Containers/com.gingerlabs.Notability/\n"
-            "    ~/Library/Containers/com.gingerlabs.Notability/...\n"
-            "  Or pass --path <dir> to point at an alternate location."
-        )
-        sys.exit(1)
-
-    note_files: list[Path] = []
-    for base in note_dirs:
-        note_files.extend(find_note_files(base))
-
-    if not note_files:
-        log.error(
-            "No .note files found under: %s\n"
-            "  If notes exist only on iPad/iPhone, enable iCloud sync first.",
-            ", ".join(str(d) for d in note_dirs),
-        )
-        sys.exit(1)
-
-    log.info("Processing %d .note file(s)", len(note_files))
-    return extract_cards_from_notes(note_files)
-
-
-def _run_sqlite_mode(args: argparse.Namespace) -> list[dict[str, Any]]:
-    """Extract cards from a Notability SQLite index database."""
-    log.warning(
-        "SQLite mode selected. NOTE: Confirmed research shows Notability does NOT store "
-        "note content in SQLite. A .sqlite file may exist as a settings/index DB, but "
-        "flashcard text is unlikely to be there. Consider --mode note instead.\n"
-        "  Reference: https://jvns.ca/blog/2018/03/31/reverse-engineering-notability-format/"
-    )
-
-    search_root = Path(args.path).expanduser() if args.path else None
-    db_path = find_db(hint=args.db, search_root=search_root)
-    if db_path is None:
-        sys.exit(1)
-
-    conn = open_db(db_path)
-    tables = list_tables(conn)
-
-    if args.list_tables:
-        print(f"\nDatabase: {db_path}")
-        print(f"{'Table':<40} Columns")
-        print("-" * 80)
-        print_schema(conn, tables)
-        conn.close()
-        sys.exit(0)
-
-    target_tables: list[str]
-    if args.table:
-        if args.table not in tables:
-            log.error(
-                "Table '%s' not found. Run --mode sqlite --list-tables to see available tables.",
-                args.table,
-            )
-            conn.close()
-            sys.exit(1)
-        target_tables = [args.table]
-    else:
-        target_tables = find_flashcard_tables(tables)
-        if not target_tables:
-            log.error(
-                "No flashcard-related tables found automatically.\n"
-                "  Run --mode sqlite --list-tables to inspect the schema."
-            )
-            conn.close()
-            sys.exit(1)
-
-    log.info("Extracting from table(s): %s", target_tables)
-    all_cards: list[dict[str, Any]] = []
-    for table in target_tables:
-        all_cards.extend(extract_cards(conn, table))
-    conn.close()
-    return all_cards
+    return p
 
 
 def main() -> None:
-    parser = _build_parser()
-    args = parser.parse_args()
+    args = _build_parser().parse_args()
     configure_logging(verbose=args.verbose)
 
-    # --list-tables only makes sense in sqlite mode
-    if args.list_tables and args.mode != "sqlite":
-        log.info("--list-tables implies --mode sqlite")
-        args.mode = "sqlite"
-
-    all_cards = _run_note_mode(args) if args.mode == "note" else _run_sqlite_mode(args)
-
-    if not all_cards:
+    # platform gating
+    if args.extract_only and not is_macos():
+        log.error("--extract-only is only available on macOS")
+        sys.exit(1)
+    if args.export_dir is None and not is_macos():
         log.error(
-            "No cards were extracted.\n"
-            "  In 'note' mode: the .note files may not contain Learn/flashcard data yet.\n"
-            "  In 'sqlite' mode: the table(s) may be empty or store content as binary blobs.\n"
-            "  Try --mode sqlite --list-tables to inspect the raw database schema."
+            "This command needs --export-dir on non-macOS. Phase 1 extraction "
+            "requires Notability data that only exists on Macs. Provide a "
+            "pre-extracted directory (run on a Mac first, then transfer)."
         )
         sys.exit(1)
 
-    out_path = Path(args.out)
-    try:
-        write_apkg(all_cards, args.deck_name, out_path)
-    except ValueError as exc:
-        log.error("%s", exc)
-        sys.exit(1)
+    # phase 1: extract
+    if args.export_dir:
+        export_dir = Path(args.export_dir).expanduser()
+    else:
+        export_dir = default_export_dir()
+        notes = Path(args.notes_dir).expanduser() if args.notes_dir else default_notes_dir()
+        cache = Path(args.cache_dir).expanduser() if args.cache_dir else default_cache_dir()
+        run_extract(notes, cache, export_dir)
 
-    print(f"\nDone. {len(all_cards)} cards written to: {out_path}")
-    print(f"Import into Anki via: File > Import > {out_path}")
+    if args.extract_only:
+        return
+
+    # parse + validate format list
+    formats = [f.strip() for f in args.format.split(",") if f.strip()]
+    for f in formats:
+        if f not in _FORMATS:
+            log.error("Unknown format: %s. Valid: %s", f, ", ".join(_FORMATS))
+            sys.exit(1)
+
+    # phase 2: build
+    deck = read_export_dir(export_dir, deck_name=args.deck_name)
+    log.info(
+        "Loaded deck: %d cards, %d summaries, %d notes",
+        len(deck.cards),
+        len(deck.summaries),
+        len(deck.notes),
+    )
+
+    out_dir = Path(args.out_dir).expanduser()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if "apkg" in formats:
+        path = out_dir / "notability_flashcards.apkg"
+        write_apkg_deck(deck, path)
+        log.info("Wrote %s", path)
+    if "json" in formats:
+        path = out_dir / "notability_flashcards.json"
+        write_json_deck(deck, path)
+        log.info("Wrote %s", path)
+    if "md" in formats:
+        path = out_dir / "notability_flashcards.md"
+        write_md_deck(deck, path)
+        log.info("Wrote %s", path)
