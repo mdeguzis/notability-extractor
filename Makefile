@@ -7,18 +7,16 @@ SHELL := bash
 # pass CLI args through: make run ARGS="--list-tables"
 ARGS ?=
 
-.PHONY: help install install-prod lock lint typecheck format format-check \
+.PHONY: help install lock lint typecheck format format-check \
         test test-cov build run clean check
 
 help: ## show this help
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} \
 	      /^[a-zA-Z_-]+:.*?##/ { printf "  %-14s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
-install: ## install all deps including dev group
+install: ## install dev env + put notability-extractor on PATH (~/.local/bin)
 	uv sync
-
-install-prod: ## install runtime deps only (no dev tools)
-	uv sync --no-dev
+	uv tool install --editable --force .
 
 lock: ## regenerate uv.lock
 	uv lock

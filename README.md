@@ -23,11 +23,17 @@ iCloud sync enabled, these files are present even if the iPad is the primary dev
 
 ## Usage
 
-First install so the `notability-extractor` console script lands on PATH:
+First install. This sets up the dev environment in `.venv/` and drops the
+`notability-extractor` console script into `~/.local/bin/` so it's runnable from
+any shell (assuming `~/.local/bin` is on your `PATH`):
 
 ```bash
 make install
 ```
+
+The install is editable, so source changes are picked up right away without
+re-running `make install`. To remove the binary later: `uv tool uninstall
+notability-extractor`.
 
 Then:
 
