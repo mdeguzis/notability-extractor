@@ -137,6 +137,14 @@ def main() -> None:
         len(deck.summaries),
         len(deck.notes),
     )
+    if not deck.cards and not deck.summaries and not deck.notes:
+        log.error(
+            "Nothing found under '%s'. Check the path points at a Notability "
+            "export directory (containing learn/quizzes/, learn/summaries/, "
+            "and/or top-level *.txt files).",
+            input_dir,
+        )
+        sys.exit(1)
 
     out_dir = Path(args.out_dir).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)

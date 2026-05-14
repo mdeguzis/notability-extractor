@@ -10,11 +10,35 @@ from notability_extractor.utils import get_logger
 log = get_logger(__name__)
 
 
+def looks_like_export_dir(p: Path) -> bool:
+    """True if p has the export-dir shape: learn/ subdir or top-level *.txt files."""
+    return (p / "learn").is_dir() or bool(list(p.glob("*.txt")))
+
+
+def resolve_input_dir(input_dir: Path) -> Path:
+    """If input_dir already looks like an export, use it. Otherwise check children
+    for exactly one that does, and descend into it. Returns the resolved dir."""
+    if not input_dir.is_dir():
+        return input_dir
+    if looks_like_export_dir(input_dir):
+        return input_dir
+    matches = [
+        child
+        for child in sorted(input_dir.iterdir())
+        if child.is_dir() and looks_like_export_dir(child)
+    ]
+    if len(matches) == 1:
+        log.info("Auto-descended into %s (looked like the actual export dir)", matches[0])
+        return matches[0]
+    return input_dir
+
+
 def read_input_dir(
     input_dir: Path,
     deck_name: str = "Notability Flashcards",
 ) -> Deck:
     """Walk input_dir and produce a Deck."""
+    input_dir = resolve_input_dir(input_dir)
     cards = _read_quizzes(input_dir / "learn" / "quizzes")
     summaries = _read_summaries(input_dir / "learn" / "summaries")
     notes = _read_notes(input_dir)

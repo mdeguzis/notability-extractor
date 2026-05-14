@@ -66,6 +66,22 @@ def test_format_filter_writes_only_json(tmp_path: Path):
     assert not (tmp_path / "notability_flashcards.md").exists()
 
 
+def test_empty_input_dir_exits_nonzero(tmp_path: Path):
+    # pointing at an empty dir should fail loud, not silently write a 0-card deck
+    r = _run(
+        [
+            "--input-dir",
+            str(tmp_path),
+            "--out-dir",
+            str(tmp_path / "out"),
+        ]
+    )
+    assert r.returncode != 0
+    assert "nothing found" in (r.stderr + r.stdout).lower()
+    # no output files written
+    assert not (tmp_path / "out" / "notability_flashcards.json").exists()
+
+
 @pytest.mark.skipif(not FIXTURE.is_dir(), reason="test fixture not present")
 def test_json_output_round_trips(tmp_path: Path):
     _run(
