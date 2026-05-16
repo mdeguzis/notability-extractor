@@ -12,10 +12,12 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QComboBox,
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSplitter,
@@ -70,9 +72,11 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
         self._search.textChanged.connect(self._on_filter_changed)
         left.addWidget(self._search)
 
-        self._tag_filter = QComboBox()
-        self._tag_filter.setPlaceholderText("Filter by tag...")
-        self._tag_filter.currentTextChanged.connect(self._on_filter_changed)
+        # multi-select tag filter: each row is a checkable tag; any-match
+        left.addWidget(QLabel("Filter by tag:"))
+        self._tag_filter = QListWidget()
+        self._tag_filter.setMaximumHeight(120)
+        self._tag_filter.itemChanged.connect(lambda _item: self._on_filter_changed())
         left.addWidget(self._tag_filter)
 
         self._table = QTableWidget(0, 3)
@@ -117,26 +121,35 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
         all_tags = flt.all_tags(self._cards)
         # keep tag autocomplete pool in sync with what's actually in the archive
         self._editor._known_tags = all_tags  # pylint: disable=protected-access
-        # rebuild the filter combobox, preserving the current selection if it
-        # still exists in the new tag set
-        current = self._tag_filter.currentText()
+        # rebuild the filter list, preserving the set of currently-checked tags
+        # so a refresh after add/edit doesn't drop the user's selection
+        previously_checked = self._checked_tags()
         self._tag_filter.blockSignals(True)
         self._tag_filter.clear()
-        self._tag_filter.addItem("(all tags)")
         for t in all_tags:
-            self._tag_filter.addItem(t)
-        if current and current != "(all tags)" and current in all_tags:
-            self._tag_filter.setCurrentText(current)
-        else:
-            self._tag_filter.setCurrentIndex(0)
+            item = QListWidgetItem(t)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(
+                Qt.CheckState.Checked if t in previously_checked else Qt.CheckState.Unchecked
+            )
+            self._tag_filter.addItem(item)
         self._tag_filter.blockSignals(False)
         self._on_filter_changed()
 
+    def _checked_tags(self) -> list[str]:
+        out: list[str] = []
+        for i in range(self._tag_filter.count()):
+            item = self._tag_filter.item(i)
+            if item is not None and item.checkState() == Qt.CheckState.Checked:
+                out.append(item.text())
+        return out
+
     def _on_filter_changed(self, _text: str = "") -> None:
         visible = list(self._cards)
-        tag = self._tag_filter.currentText()
-        if tag and tag != "(all tags)":
-            visible = flt.by_tags(visible, [tag])
+        checked = self._checked_tags()
+        if checked:
+            # any-match: a card needs at least one checked tag to appear
+            visible = flt.by_tags(visible, checked, mode="any")
         query = self._search.text()
         if query:
             visible = flt.by_text(visible, query)

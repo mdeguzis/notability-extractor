@@ -1,4 +1,4 @@
-"""Chip-style tag input with autocomplete."""
+"""Chip-style tag input with autocomplete and per-tag color picker."""
 
 # PySide6 Signals are resolved at runtime via C extensions; pylint cant see
 # the .connect() members statically even with extension-pkg-allow-list.
@@ -6,16 +6,35 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QCompleter,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
+
+from notability_extractor.archive import config as archive_config
+
+DEFAULT_CHIP_COLOR = "#3a4a5c"
+
+# small curated palette - works in both light and dark themes
+_TAG_COLORS: list[tuple[str, str]] = [
+    ("Blue", "#3a4a5c"),
+    ("Green", "#2d7d4a"),
+    ("Red", "#b13a3a"),
+    ("Orange", "#c87a2d"),
+    ("Gold", "#b3922d"),
+    ("Purple", "#6b3a8c"),
+    ("Teal", "#2d8c87"),
+    ("Pink", "#b13a7a"),
+    ("Gray", "#5a5a5a"),
+]
 
 
 def _normalize(raw: str) -> str:
@@ -23,8 +42,17 @@ def _normalize(raw: str) -> str:
     return " ".join(raw.split())
 
 
+def _chip_stylesheet(color: str) -> str:
+    return f"background:{color}; color:#e8eef5; border-radius:10px; padding:2px 6px;"
+
+
 class TagInput(QWidget):
-    """Removable tag chips + a text entry with autocomplete."""
+    """Removable tag chips + a text entry with autocomplete.
+
+    Each chip has a small dropdown arrow that opens a color picker. The chosen
+    color is persisted in config.tag_colors and applies wherever the tag is
+    rendered (this widget + any future tag-aware UI).
+    """
 
     changed = Signal()
 
@@ -63,22 +91,55 @@ class TagInput(QWidget):
         if tag in self._tags:
             return
         self._tags.append(tag)
+        chip = self._build_chip(tag)
+        self._chip_row.addWidget(chip)
+        self.changed.emit()
+
+    def _build_chip(self, tag: str) -> QWidget:
         chip = QWidget()
         row = QHBoxLayout(chip)
         row.setContentsMargins(6, 2, 4, 2)
+        row.setSpacing(2)
         lbl = QLabel(tag)
+
+        color = archive_config.get_tag_color(tag) or DEFAULT_CHIP_COLOR
+        chip.setStyleSheet(_chip_stylesheet(color))
+
+        # dropdown arrow: opens a color menu
+        color_btn = QPushButton("▾")  # downward small triangle
+        color_btn.setFixedSize(16, 16)
+        color_btn.setStyleSheet("background: transparent; border: none; color: #e8eef5;")
+        color_btn.setToolTip("Change color")
+        color_btn.clicked.connect(lambda *_, t=tag, c=chip, b=color_btn: self._pick_color(t, c, b))
+
         x = QPushButton("x")
         x.setFixedSize(16, 16)
+        x.setStyleSheet("background: transparent; border: none; color: #e8eef5;")
         # capture both tag and chip_widget to avoid the cell-var-from-loop issue
         x.clicked.connect(lambda *_, t=tag, c=chip: self._remove(t, c))
+
         row.addWidget(lbl)
+        row.addWidget(color_btn)
         row.addWidget(x)
-        # explicit fg+bg so the chip stays readable in both light and dark themes
-        # (dark mode inherits white text onto the light-gray bg, making it invisible)
-        chip.setStyleSheet(
-            "background:#3a4a5c; color:#e8eef5; border-radius:10px; padding:2px 6px;"
-        )
-        self._chip_row.addWidget(chip)
+        return chip
+
+    def _pick_color(self, tag: str, chip_widget: QWidget, anchor: QWidget) -> None:
+        menu = QMenu(self)
+        for name, hex_color in _TAG_COLORS:
+            act = QAction(name, menu)
+            # small color swatch icon via stylesheet wouldn't render in QAction;
+            # rely on the tooltip and the immediate-apply feedback instead
+            act.setData(hex_color)
+            act.triggered.connect(
+                lambda _checked=False, t=tag, c=chip_widget, h=hex_color: self._set_color(t, c, h)
+            )
+            menu.addAction(act)
+        # show the menu just below the dropdown arrow button
+        menu.exec(anchor.mapToGlobal(QPoint(0, anchor.height())))
+
+    def _set_color(self, tag: str, chip_widget: QWidget, color: str) -> None:
+        archive_config.set_tag_color(tag, color)
+        chip_widget.setStyleSheet(_chip_stylesheet(color))
         self.changed.emit()
 
     def _remove(self, tag: str, chip_widget: QWidget) -> None:

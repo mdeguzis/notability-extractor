@@ -32,6 +32,8 @@ _DEFAULTS: dict[str, Any] = {
     "export_dir": str(Path.home() / "Documents" / "notability-backups"),
     "schedule": "off",
     "retention": 10,
+    # tag_colors: { "biology": "#2d7d4a", ... } - chip color per tag, global
+    "tag_colors": {},
 }
 
 
@@ -83,4 +85,25 @@ def set_value(key: str, value: Any, path: Path = DEFAULT_CONFIG_PATH) -> None:
     """Convenience: load, set one key, save."""
     cfg = load(path)
     cfg[key] = value
+    save(cfg, path)
+
+
+def get_tag_color(tag: str, path: Path = DEFAULT_CONFIG_PATH) -> str | None:
+    """Return the saved chip color for this tag, or None for the default."""
+    cfg = load(path)
+    tag_colors = cfg.get("tag_colors", {})
+    if isinstance(tag_colors, dict):
+        val = tag_colors.get(tag)
+        return val if isinstance(val, str) else None
+    return None
+
+
+def set_tag_color(tag: str, color: str, path: Path = DEFAULT_CONFIG_PATH) -> None:
+    """Persist a chip color for this tag. Applied globally everywhere tag appears."""
+    cfg = load(path)
+    tag_colors = cfg.get("tag_colors", {})
+    if not isinstance(tag_colors, dict):
+        tag_colors = {}
+    tag_colors[tag] = color
+    cfg["tag_colors"] = tag_colors
     save(cfg, path)
