@@ -54,6 +54,23 @@ def build_app(headless: bool = False) -> tuple[QApplication, MainWindow]:
         font.setPointSize(saved_font_size)
         app.setFont(font)
 
+    # global QSplitter handle styling so resize bars are actually visible.
+    # Qt's default is 2-3 tiny dots that disappear against a dark theme.
+    # 10px wide bar, subtle in idle state and brighter on hover.
+    app.setStyleSheet(app.styleSheet() + """
+        QSplitter::handle {
+            background: rgba(160, 160, 168, 60);
+        }
+        QSplitter::handle:horizontal { width: 10px; }
+        QSplitter::handle:vertical   { height: 10px; }
+        QSplitter::handle:hover {
+            background: rgba(100, 160, 220, 180);
+        }
+        QSplitter::handle:pressed {
+            background: rgba(100, 160, 220, 220);
+        }
+        """)
+
     window = MainWindow()
     if not headless:
         window.show()

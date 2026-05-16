@@ -30,7 +30,13 @@ class MainWindow(
         self._sidebar = QListWidget()
         # min width keeps the sidebar usable at small sizes but the user can
         # drag the splitter to widen it for long question titles
-        self._sidebar.setMinimumWidth(120)
+        self._sidebar.setMinimumWidth(160)
+        # nav is the most-used surface, make it more prominent than body text
+        self._sidebar.setStyleSheet(
+            "QListWidget { font-size: 15px; padding: 6px 4px; outline: none; }"
+            "QListWidget::item { padding: 8px 10px; border-radius: 4px; }"
+            "QListWidget::item:selected { background: #2a4d8f; color: white; }"
+        )
         for name in _PAGE_NAMES:
             self._sidebar.addItem(QListWidgetItem(name))
         self._sidebar.currentRowChanged.connect(  # pylint: disable=no-member

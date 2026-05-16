@@ -18,6 +18,10 @@ import subprocess
 from pathlib import Path
 from typing import Literal
 
+from notability_extractor.utils import get_logger
+
+log = get_logger(__name__)
+
 Cadence = Literal["hourly", "daily", "weekly"]
 
 _CRON_MARKER = "# notability-extractor-backup (managed)"
@@ -113,17 +117,21 @@ def is_installed() -> bool:
 
 
 def _install_cron(cadence: Cadence) -> tuple[bool, str]:
+    log.debug("reading current crontab")
     current = subprocess.run(["crontab", "-l"], capture_output=True, text=True, check=False)
     existing = current.stdout if current.returncode == 0 else ""
     filtered = _strip_managed_block(existing)
-    new_block = f"{_CRON_MARKER}\n{cron_line(cadence)}\n"
+    new_line = cron_line(cadence)
+    new_block = f"{_CRON_MARKER}\n{new_line}\n"
     combined = (filtered.rstrip() + "\n\n" + new_block) if filtered.strip() else new_block
+    log.info("writing crontab with managed line: %s", new_line)
     result = subprocess.run(
         ["crontab", "-"], input=combined, text=True, capture_output=True, check=False
     )
     if result.returncode != 0:
+        log.error("crontab install failed: %s", result.stderr.strip())
         return False, f"crontab install failed: {result.stderr.strip()}"
-    return True, f"Installed cron: {cron_line(cadence)}"
+    return True, f"Installed cron: {new_line}"
 
 
 def _uninstall_cron() -> tuple[bool, str]:
@@ -156,6 +164,7 @@ def _strip_managed_block(crontab_text: str) -> str:
 
 def _install_launchd(cadence: Cadence) -> tuple[bool, str]:
     LAUNCHD_PLIST.parent.mkdir(parents=True, exist_ok=True)
+    log.info("writing LaunchAgent plist to %s (cadence=%s)", LAUNCHD_PLIST, cadence)
     LAUNCHD_PLIST.write_text(launchd_plist(cadence))
     # unload any prior version so reload picks up the new plist
     subprocess.run(
@@ -163,6 +172,7 @@ def _install_launchd(cadence: Cadence) -> tuple[bool, str]:
         capture_output=True,
         check=False,
     )
+    log.debug("launchctl load %s", LAUNCHD_PLIST)
     result = subprocess.run(
         ["launchctl", "load", str(LAUNCHD_PLIST)],
         capture_output=True,
@@ -170,6 +180,7 @@ def _install_launchd(cadence: Cadence) -> tuple[bool, str]:
         check=False,
     )
     if result.returncode != 0:
+        log.error("launchctl load failed: %s", result.stderr.strip())
         return False, f"launchctl load failed: {result.stderr.strip()}"
     return True, f"Installed LaunchAgent at {LAUNCHD_PLIST}"
 

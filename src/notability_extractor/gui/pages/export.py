@@ -19,9 +19,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from notability_extractor.archive import config as archive_config
 from notability_extractor.archive import store as archive_store
 from notability_extractor.build import flashcards, notes, summaries
 from notability_extractor.build.reader import read_input_dir
+from notability_extractor.utils import get_logger
+
+log = get_logger(__name__)
 
 
 class ExportPage(QWidget):
@@ -33,7 +37,9 @@ class ExportPage(QWidget):
 
         out_row = QHBoxLayout()
         out_row.addWidget(QLabel("Output dir:"))
-        self._out = QLineEdit(".")
+        saved_out = archive_config.get("output_dir")
+        self._out = QLineEdit(saved_out if isinstance(saved_out, str) and saved_out else ".")
+        self._out.editingFinished.connect(self._save_output_dir)
         out_row.addWidget(self._out, 1)
         pick = QPushButton("Browse...")
         pick.clicked.connect(self._pick_out)
@@ -80,6 +86,10 @@ class ExportPage(QWidget):
         d = QFileDialog.getExistingDirectory(self, "Choose output directory")
         if d:
             self._out.setText(d)
+            self._save_output_dir()
+
+    def _save_output_dir(self) -> None:
+        archive_config.set_value("output_dir", self._out.text() or ".")
 
     def set_input_dir(self, input_dir: Path | None) -> None:
         """Update the source dir (called by MainWindow after Settings changes)."""
@@ -89,6 +99,7 @@ class ExportPage(QWidget):
         out_dir = Path(self._out.text()).expanduser()
         out_dir.mkdir(parents=True, exist_ok=True)
         cards = archive_store.load()
+        log.info("export: writing to %s, %d cards in archive", out_dir, len(cards))
         self._log.append(f"Loaded {len(cards)} cards from archive.")
         if self._cb_apkg.isChecked():
             flashcards.write_apkg(
@@ -120,4 +131,6 @@ class ExportPage(QWidget):
                 summaries.write_md(deck.summaries, out_dir / "notability_summaries.md")
                 self._log.append("wrote notability_summaries.md")
         else:
+            log.info("export: no input_dir set, skipping notes/summaries")
             self._log.append("(no input dir set; skipping notes/summaries)")
+        log.info("export complete: out_dir=%s", out_dir)

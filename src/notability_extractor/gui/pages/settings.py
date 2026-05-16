@@ -32,7 +32,9 @@ from notability_extractor.archive import store as archive_store
 from notability_extractor.build.reader import read_input_dir
 from notability_extractor.extract.platform_check import is_macos
 from notability_extractor.gui.theme import apply_theme
-from notability_extractor.utils import DEFAULT_LOG_DIR, configure_logging
+from notability_extractor.utils import DEFAULT_LOG_DIR, configure_logging, get_logger
+
+log = get_logger(__name__)
 
 
 class SettingsPage(QWidget):
@@ -181,13 +183,14 @@ class SettingsPage(QWidget):
         self._save_field("input_dir", self._input_dir.text())
 
     def _on_theme_changed(self, new_theme: str) -> None:
+        log.info("settings: theme changed to %s", new_theme)
         self._save_field("theme", new_theme)
         app = QApplication.instance()
         if app is not None:
-            # cast is safe: QCoreApplication.instance() returns QApplication here
             apply_theme(app, new_theme)  # type: ignore[arg-type]
 
     def _on_font_size_changed(self, new_size: int) -> None:
+        log.info("settings: font size changed to %dpt", int(new_size))
         self._save_field("font_size", int(new_size))
         app = QApplication.instance()
         if app is not None:
@@ -196,15 +199,18 @@ class SettingsPage(QWidget):
             app.setFont(font)  # type: ignore[attr-defined]
 
     def _on_log_level_changed(self, new_level: str) -> None:
+        log.info("settings: log level changed to %s", new_level)
         self._save_field("log_level", new_level)
         configure_logging(level=new_level)
 
     def _open_logs(self) -> None:
         DEFAULT_LOG_DIR.mkdir(parents=True, exist_ok=True)
         opener = "open" if platform.system() == "Darwin" else "xdg-open"
+        log.debug("opening logs dir %s with %s", DEFAULT_LOG_DIR, opener)
         try:
             subprocess.Popen([opener, str(DEFAULT_LOG_DIR)])  # pylint: disable=consider-using-with
         except OSError as exc:
+            log.error("could not open logs dir: %s", exc)
             QMessageBox.warning(self, "Open logs folder", f"Could not open folder: {exc}")
 
     def _pick_input(self) -> None:
@@ -218,15 +224,24 @@ class SettingsPage(QWidget):
     def _on_pull(self) -> None:
         input_dir = (self._input_dir.text() or "").strip()
         if not input_dir or not Path(input_dir).is_dir():
+            log.warning("pull aborted: no valid input dir set (got %r)", input_dir)
             self._pull_status.setText("Set a valid extraction location first.")
             return
+        log.info("pull: reading from %s", input_dir)
         try:
             deck = read_input_dir(Path(input_dir))
         except (OSError, ValueError) as exc:
+            log.error("pull failed reading %s: %s", input_dir, exc)
             self._pull_status.setText(f"Read failed: {exc}")
             return
         added, skipped = archive_store.merge(deck.cards)
-        archive_backup.snapshot()
+        snap = archive_backup.snapshot()
+        log.info(
+            "pull complete: %d added, %d duplicates, snapshot=%s",
+            added,
+            skipped,
+            snap.name if snap else "(no changes)",
+        )
         self._pull_status.setText(
             f"Pulled {added} new cards ({skipped} already known). "
             f"{len(deck.notes)} notes, {len(deck.summaries)} summaries available."
@@ -244,9 +259,16 @@ class SettingsPage(QWidget):
         )
 
         target = default_input_dir()
+        log.info(
+            "macOS extract: notes=%s cache=%s target=%s",
+            default_notes_dir(),
+            default_cache_dir(),
+            target,
+        )
         try:
             run_extract(default_notes_dir(), default_cache_dir(), target)
         except OSError as exc:
+            log.error("macOS extract failed: %s", exc)
             self._pull_status.setText(f"Extract failed: {exc}")
             return
         self._input_dir.setText(str(target))
@@ -256,18 +278,21 @@ class SettingsPage(QWidget):
     # --- backup buttons ---
 
     def _do_backup(self) -> None:
+        log.info("manual backup triggered from settings")
         path = archive_backup.snapshot()
         if path:
+            log.info("backup wrote %s", path.name)
             self._status.setText(f"Last backup: {path.name}")
         else:
+            log.info("backup deduped: no changes since last snapshot")
             self._status.setText("Last backup: no changes since last snapshot")
 
     def _do_restore(self) -> None:
         snaps = archive_backup.list_snapshots()
+        log.debug("restore: found %d snapshots", len(snaps))
         if not snaps:
             QMessageBox.information(self, "Restore", "No snapshots available.")
             return
-        # simple text-list picker; users on Settings know what they're doing
         names = "\n".join(f"{s.path.name}  ({s.timestamp.isoformat()})" for s in snaps)
         QMessageBox.information(
             self,
@@ -283,8 +308,10 @@ class SettingsPage(QWidget):
             "JSONL (*.jsonl);;JSON (*.json)",
         )
         if not path:
+            log.debug("export archive cancelled by user")
             return
         fmt: Literal["json", "jsonl"] = "json" if path.endswith(".json") else "jsonl"
+        log.info("exporting archive to %s (fmt=%s)", path, fmt)
         archive_backup.export_archive(Path(path), fmt=fmt)
 
     def _do_import(self) -> None:
@@ -295,6 +322,7 @@ class SettingsPage(QWidget):
             "JSONL (*.jsonl);;JSON (*.json)",
         )
         if not path:
+            log.debug("import archive cancelled by user")
             return
         confirm = QMessageBox.question(
             self,
@@ -304,7 +332,9 @@ class SettingsPage(QWidget):
         mode: Literal["merge", "replace"] = (
             "merge" if confirm == QMessageBox.StandardButton.Yes else "replace"
         )
-        archive_backup.import_archive(Path(path), mode=mode)
+        log.info("importing archive from %s (mode=%s)", path, mode)
+        added, skipped = archive_backup.import_archive(Path(path), mode=mode)
+        log.info("import complete: %d added, %d duplicates", added, skipped)
         if self._on_archive_changed is not None:
             self._on_archive_changed()
 
@@ -339,11 +369,21 @@ class SettingsPage(QWidget):
             )
             return
         # cadence is one of the valid Literal values at this point
-        _, msg = scheduler_install.install(cadence)  # type: ignore[arg-type]
+        log.info("installing schedule cadence=%s", cadence)
+        ok, msg = scheduler_install.install(cadence)  # type: ignore[arg-type]
+        if ok:
+            log.info("schedule install ok: %s", msg)
+        else:
+            log.error("schedule install failed: %s", msg)
         QMessageBox.information(self, "Install schedule", msg)
         self._refresh_schedule_status()
 
     def _do_uninstall_schedule(self) -> None:
-        _, msg = scheduler_install.uninstall()
+        log.info("removing schedule")
+        ok, msg = scheduler_install.uninstall()
+        if ok:
+            log.info("schedule remove ok: %s", msg)
+        else:
+            log.error("schedule remove failed: %s", msg)
         QMessageBox.information(self, "Remove schedule", msg)
         self._refresh_schedule_status()

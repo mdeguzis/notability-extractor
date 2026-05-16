@@ -4,12 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "notability-extractor"
-version = "0.1.0"
-description = "Extract flashcards from Notability's SQLite database and export to Anki .apkg"
+version = "0.2.0"
+description = "Extract Notability Learn quizzes, summaries, and note text; export to Anki / JSON / Markdown with a PySide6 GUI"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-keywords = ["notability", "anki", "flashcards", "sqlite", "spaced-repetition"]
+keywords = ["notability", "anki", "flashcards", "ocr", "spaced-repetition", "gui", "pyside6"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",

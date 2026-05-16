@@ -25,11 +25,12 @@ DEFAULT_CONFIG_PATH = Path.home() / ".notability_extractor" / "config.json"
 #   retention  - how many snapshots to keep
 _DEFAULTS: dict[str, Any] = {
     "theme": "auto",
-    "font_size": 11,
+    "font_size": 13,
     "log_level": "info",
     "deck_name": "Notability Flashcards",
     "input_dir": "",
     "export_dir": str(Path.home() / "Documents" / "notability-backups"),
+    "output_dir": ".",
     "schedule": "off",
     "retention": 10,
     # tag_colors: { "biology": "#2d7d4a", ... } - chip color per tag, global
