@@ -35,6 +35,26 @@ notability-extractor-gui = "notability_extractor.gui.app:main"
 Homepage = "https://github.com/mdeguzis/notability-extractor"
 Issues = "https://github.com/mdeguzis/notability-extractor/issues"
 
+[tool.hatch.build]
+# things that should never end up in the sdist or wheel.
+# .venv-publish is created by upload-to-pypi.sh in the project root; without
+# this exclude, hatchling tries to pack the venv's python symlink and fails.
+exclude = [
+    "/.venv*",
+    "/.uv",
+    "/build",
+    "/dist",
+    "/.pytest_cache",
+    "/.mypy_cache",
+    "/.ruff_cache",
+    "/.superpowers",
+    "/.claude",
+    "/docs/superpowers",
+    "**/__pycache__",
+    "**/*.pyc",
+    "*.apkg",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/notability_extractor"]
 
