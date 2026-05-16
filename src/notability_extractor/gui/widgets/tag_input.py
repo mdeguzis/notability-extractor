@@ -73,7 +73,11 @@ class TagInput(QWidget):
         x.clicked.connect(lambda *_, t=tag, c=chip: self._remove(t, c))
         row.addWidget(lbl)
         row.addWidget(x)
-        chip.setStyleSheet("background:#e0e0e0; border-radius:8px;")
+        # explicit fg+bg so the chip stays readable in both light and dark themes
+        # (dark mode inherits white text onto the light-gray bg, making it invisible)
+        chip.setStyleSheet(
+            "background:#3a4a5c; color:#e8eef5; border-radius:10px; padding:2px 6px;"
+        )
         self._chip_row.addWidget(chip)
         self.changed.emit()
 

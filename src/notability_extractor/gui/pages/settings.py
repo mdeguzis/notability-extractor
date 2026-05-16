@@ -24,12 +24,11 @@ from PySide6.QtWidgets import (
 
 from notability_extractor.archive import backup as archive_backup
 from notability_extractor.archive import config as archive_config
+from notability_extractor.archive import scheduler_install
 from notability_extractor.archive import store as archive_store
 from notability_extractor.build.reader import read_input_dir
 from notability_extractor.extract.platform_check import is_macos
 from notability_extractor.gui.theme import apply_theme
-
-_CRON_LINE = "0 * * * * notability-extractor --backup"
 
 
 class SettingsPage(QWidget):
@@ -126,9 +125,29 @@ class SettingsPage(QWidget):
         self._status = QLabel("Last backup: never")
         layout.addWidget(self._status)
 
-        cron = QLabel(f"Headless cadence: copy this into cron/systemd:\n    {_CRON_LINE}")
-        cron.setWordWrap(True)
-        layout.addWidget(cron)
+        # --- Schedule installation (platform-aware) ---
+        if scheduler_install.system_supported():
+            sched_row = QHBoxLayout()
+            self._install_schedule_btn = QPushButton("Install schedule")
+            self._install_schedule_btn.clicked.connect(self._do_install_schedule)
+            self._remove_schedule_btn = QPushButton("Remove schedule")
+            self._remove_schedule_btn.clicked.connect(self._do_uninstall_schedule)
+            sched_row.addWidget(self._install_schedule_btn)
+            sched_row.addWidget(self._remove_schedule_btn)
+            layout.addLayout(sched_row)
+
+            self._schedule_status = QLabel()
+            self._schedule_status.setWordWrap(True)
+            layout.addWidget(self._schedule_status)
+            self._refresh_schedule_status()
+        else:
+            fallback = QLabel(
+                "Scheduled backups: install your platform's equivalent of "
+                "`notability-extractor --backup` (manual)."
+            )
+            fallback.setWordWrap(True)
+            layout.addWidget(fallback)
+
         layout.addStretch(1)
 
     # --- save helpers ---
@@ -246,3 +265,43 @@ class SettingsPage(QWidget):
         archive_backup.import_archive(Path(path), mode=mode)
         if self._on_archive_changed is not None:
             self._on_archive_changed()
+
+    # --- schedule install/remove ---
+
+    def _refresh_schedule_status(self) -> None:
+        if scheduler_install.is_installed():
+            if scheduler_install.is_macos():
+                line = "LaunchAgent at " + str(scheduler_install.LAUNCHD_PLIST)
+            else:
+                line = scheduler_install.cron_line(self._current_cadence_for_install())
+            self._schedule_status.setText(f"Schedule installed -> {line}")
+        else:
+            self._schedule_status.setText(
+                "Schedule not installed. Pick a cadence above, then click Install schedule."
+            )
+
+    def _current_cadence_for_install(self) -> scheduler_install.Cadence:
+        val = self._cadence.currentText()
+        if val == "off":
+            return "daily"  # fallback for status display only
+        # the combobox only has off/hourly/daily/weekly so this cast is safe
+        return val  # type: ignore[return-value]
+
+    def _do_install_schedule(self) -> None:
+        cadence = self._cadence.currentText()
+        if cadence == "off":
+            QMessageBox.warning(
+                self,
+                "Pick a cadence",
+                "Set Schedule to hourly / daily / weekly first, then click Install schedule.",
+            )
+            return
+        # cadence is one of the valid Literal values at this point
+        _, msg = scheduler_install.install(cadence)  # type: ignore[arg-type]
+        QMessageBox.information(self, "Install schedule", msg)
+        self._refresh_schedule_status()
+
+    def _do_uninstall_schedule(self) -> None:
+        _, msg = scheduler_install.uninstall()
+        QMessageBox.information(self, "Remove schedule", msg)
+        self._refresh_schedule_status()
