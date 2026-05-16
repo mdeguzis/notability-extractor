@@ -14,12 +14,18 @@ The tool runs in two phases:
 1. **Extract** (macOS only): walks the iCloud Drive `.nbn` bundles and the
    HTTP cache (`Cache.db` + `fsCachedData/`), writes a normalized export
    directory at `~/notability_export/`.
-2. **Build** (any OS): reads the export directory and emits three outputs:
-   `.apkg` for Anki, `.json` for programmatic review, `.md` for human reading.
+2. **Build** (any OS): reads the export directory, merges flashcards into a
+   persistent JSONL archive at `~/.notability_extractor/cards.jsonl`, and
+   emits outputs: `.apkg` for Anki, `.json` for programmatic review, `.md`
+   for human reading.
 
 Linux and Windows machines can skip phase 1 by pointing `--input-dir` at a
 directory produced on a Mac. Useful if you want to do the Anki packaging on a
 different machine than the one Notability runs on.
+
+The JSONL archive is the source of truth for flashcards. Both the CLI and the
+GUI read from and write to it, and the build always reconstructs `.apkg` from
+the archive (not the input dir) so edits and tags persist across rebuilds.
 
 ## Install
 
@@ -46,14 +52,14 @@ from any shell.
 ## Usage
 
 ```bash
-# macOS: auto-extract and build all three outputs in the current dir
+# macOS: auto-extract and build all outputs in the current dir
 notability-extractor
 
 # Anywhere: build from a pre-extracted directory
 notability-extractor --input-dir ~/notability_export
 
-# JSON output only, custom directory
-notability-extractor --input-dir ~/notability_export --format json --out-dir ./decks
+# Custom output directory
+notability-extractor --input-dir ~/notability_export --out-dir ./decks
 
 # macOS: just run phase 1 (produce export dir, no .apkg/json/md)
 notability-extractor --extract-only
@@ -68,7 +74,62 @@ Output filenames are fixed:
 |---|---|
 | `notability_flashcards.apkg` | Anki deck (quiz questions only) |
 | `notability_flashcards.json` | Full structured dump for programmatic review |
-| `notability_flashcards.md` | Human-readable cards + summaries + note transcripts |
+| `notability_flashcards.md` | Human-readable flashcards |
+| `notability_notes.{json,md}` | Note transcripts |
+| `notability_summaries.{json,md}` | Generated summaries |
+
+### Archive management CLI flags
+
+```bash
+# Open a prompt-driven editor against the archive
+notability-extractor --edit-flashcards
+
+# One-shot interactive add
+notability-extractor --add-card
+
+# Print archive contents (optionally filter by tag)
+notability-extractor --list-cards
+notability-extractor --list-cards --tag biology
+
+# Backup / restore round-trip
+notability-extractor --backup
+notability-extractor --export ~/cards-backup.jsonl
+notability-extractor --import ~/cards-backup.jsonl --mode merge
+notability-extractor --import ~/cards-backup.jsonl --mode replace
+
+# Launch the GUI
+notability-extractor --gui
+```
+
+## GUI
+
+A PySide6 desktop companion ships in the same package. After install:
+
+```bash
+notability-extractor-gui
+```
+
+Pages: Library (browse / edit / add / delete cards with tag filter), Notes
+(read-only), Summaries (read-only), Build (export apkg / json / md), Settings
+(theme, paths, backups, schedule).
+
+On Wayland with no `DISPLAY` set, the GUI auto-applies
+`QT_QPA_PLATFORM=wayland` so SSH/login sessions don't need a manual export.
+
+## Backups
+
+The archive at `~/.notability_extractor/cards.jsonl` is snapshotted on every
+save to `~/.notability_extractor/backups/cards-YYYYMMDD-HHMMSS.jsonl`,
+hash-deduped so unchanged saves don't make redundant copies. Default retention
+is the last 10 snapshots (configurable in Settings).
+
+For a scheduled backup when the GUI is closed, run from cron:
+
+```
+0 * * * * notability-extractor --backup
+```
+
+The Settings page surfaces this exact line for convenience.
 
 ## Importing into Anki
 

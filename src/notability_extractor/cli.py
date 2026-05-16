@@ -251,10 +251,11 @@ def _edit_flashcards_interactive(archive_path: Path) -> None:  # pylint: disable
 
 
 def _launch_gui() -> None:
-    # gui package may not exist yet; catch ImportError gracefully so --gui fails
-    # with a clear message rather than a traceback
+    # gui package may not exist if PySide6 isn't installed; catch ImportError so
+    # --gui fails with a clear message rather than a traceback
     try:
-        from notability_extractor.gui.app import main as gui_main  # type: ignore[import-untyped]  # pylint: disable=import-outside-toplevel  # noqa: I001
+        # pylint: disable-next=import-outside-toplevel
+        from notability_extractor.gui.app import main as gui_main
     except ImportError as exc:
         print(f"GUI unavailable: {exc}", file=sys.stderr)
         print("Reinstall with: pip install notability-extractor", file=sys.stderr)

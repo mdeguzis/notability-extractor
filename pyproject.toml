@@ -122,12 +122,30 @@ typeCheckingMode = "strict"
 reportUnknownMemberType = "none"
 reportUnknownVariableType = "none"
 reportUnknownArgumentType = "none"
+# PySide6 stubs mark several APIs as non-Optional that can be None at runtime
+# (QListWidget.item, QButtonGroup.checkedButton). Pyright's strict comparison
+# check fires on perfectly defensive code. Disable it.
+reportUnnecessaryComparison = "none"
+# Signal.connect callbacks are commonly written as untyped lambdas. Annotating
+# every one adds noise without catching bugs.
+reportUnknownLambdaType = "none"
+# fcntl vs msvcrt is bound via try/except + _HAS_FCNTL; pyright doesn't
+# propagate the runtime invariant. mypy handles it correctly.
+reportPossiblyUnboundVariable = "none"
+reportConstantRedefinition = "none"
+# Private attribute access between sibling classes in the GUI is intentional;
+# refactoring to public getters/setters bloats the API for one consumer.
+reportPrivateUsage = "none"
+# contextlib.contextmanager is not deprecated; pyright bug.
+reportDeprecated = "none"
 
 # ---------------------------------------------------------------------------
 # pylint (linter, primary - logic and design rules)
 # ---------------------------------------------------------------------------
 [tool.pylint.main]
 py-version = "3.11"
+# PySide6 uses C extensions; pylint can't introspect them without this
+extension-pkg-allow-list = ["PySide6"]
 
 [tool.pylint."messages control"]
 # ruff already covers style rules, let pylint focus on logic and design
@@ -136,6 +154,9 @@ disable = [
     "missing-module-docstring",
     "missing-class-docstring",
     "missing-function-docstring",
+    # R0801: per-file test fixtures intentionally duplicate small helpers.
+    # Sharing them across test files trades clarity for coupling — not worth it.
+    "duplicate-code",
 ]
 
 [tool.pylint.format]
