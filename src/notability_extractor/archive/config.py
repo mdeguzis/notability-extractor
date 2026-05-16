@@ -16,6 +16,8 @@ DEFAULT_CONFIG_PATH = Path.home() / ".notability_extractor" / "config.json"
 
 # Keys and what they do:
 #   theme      - color scheme: light | dark | auto (follows OS)
+#   font_size  - base point size for the GUI (applied to QApplication)
+#   log_level  - info | debug; debug logs every archive mutation for auditing
 #   deck_name  - Anki deck name used when building .apkg
 #   input_dir  - path to the Notability export dir; empty string = unset
 #   export_dir - where backup snapshots are written
@@ -23,6 +25,8 @@ DEFAULT_CONFIG_PATH = Path.home() / ".notability_extractor" / "config.json"
 #   retention  - how many snapshots to keep
 _DEFAULTS: dict[str, Any] = {
     "theme": "auto",
+    "font_size": 11,
+    "log_level": "info",
     "deck_name": "Notability Flashcards",
     "input_dir": "",
     "export_dir": str(Path.home() / "Documents" / "notability-backups"),

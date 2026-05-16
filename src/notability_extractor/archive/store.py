@@ -155,6 +155,7 @@ def add(card: Card, path: Path = DEFAULT_ARCHIVE) -> ArchivedCard:
         archived = ArchivedCard(card=card, id=card.stable_id, created_at=now, updated_at=now)
         current.append(archived)
         save_all(current, path)
+        log.info("archive add  id=%s q=%r", archived.id[:8], card.question[:60])
         return archived
 
 
@@ -172,6 +173,12 @@ def update(card_id: str, new_card: Card, path: Path = DEFAULT_ARCHIVE) -> Archiv
                 )
                 current[i] = updated
                 save_all(current, path)
+                log.info(
+                    "archive edit id=%s q=%r tags=%s",
+                    a.id[:8],
+                    new_card.question[:60],
+                    new_card.tags,
+                )
                 return updated
         raise KeyError(f"No card with id {card_id!r}")
 
@@ -184,6 +191,7 @@ def delete(card_id: str, path: Path = DEFAULT_ARCHIVE) -> None:
         if len(new) == len(current):
             raise KeyError(f"No card with id {card_id!r}")
         save_all(new, path)
+        log.info("archive del  id=%s", card_id[:8])
 
 
 def merge(incoming: list[Card], path: Path = DEFAULT_ARCHIVE) -> tuple[int, int]:
@@ -205,4 +213,5 @@ def merge(incoming: list[Card], path: Path = DEFAULT_ARCHIVE) -> tuple[int, int]
             seen.add(card.stable_id)
             added += 1
         save_all(current, path)
+        log.info("archive merge added=%d skipped=%d", added, len(incoming) - added)
         return added, len(incoming) - added

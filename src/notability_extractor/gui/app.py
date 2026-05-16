@@ -47,6 +47,13 @@ def build_app(headless: bool = False) -> tuple[QApplication, MainWindow]:
 
     saved_theme = archive_config.get("theme")
     apply_theme(app, saved_theme if saved_theme in ("light", "dark", "auto") else "auto")
+
+    saved_font_size = archive_config.get("font_size")
+    if isinstance(saved_font_size, int) and 8 <= saved_font_size <= 24:
+        font = app.font()
+        font.setPointSize(saved_font_size)
+        app.setFont(font)
+
     window = MainWindow()
     if not headless:
         window.show()
@@ -54,6 +61,8 @@ def build_app(headless: bool = False) -> tuple[QApplication, MainWindow]:
 
 
 def main() -> None:
-    configure_logging(verbose=False)
+    saved_level = archive_config.get("log_level")
+    level = saved_level if isinstance(saved_level, str) else "info"
+    configure_logging(level=level)
     app, _ = build_app()
     sys.exit(app.exec())

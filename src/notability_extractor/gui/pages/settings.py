@@ -4,9 +4,12 @@
 
 from __future__ import annotations
 
+import platform
+import subprocess
 from pathlib import Path
 from typing import Literal
 
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -29,6 +32,7 @@ from notability_extractor.archive import store as archive_store
 from notability_extractor.build.reader import read_input_dir
 from notability_extractor.extract.platform_check import is_macos
 from notability_extractor.gui.theme import apply_theme
+from notability_extractor.utils import DEFAULT_LOG_DIR, configure_logging
 
 
 class SettingsPage(QWidget):
@@ -84,6 +88,24 @@ class SettingsPage(QWidget):
         self._theme.setCurrentText(self._cfg.get("theme", "auto"))
         self._theme.currentTextChanged.connect(self._on_theme_changed)
         form.addRow("Theme:", self._theme)
+
+        # --- Font size (live apply) ---
+        self._font_size = QSpinBox()
+        self._font_size.setRange(8, 24)
+        self._font_size.setValue(int(self._cfg.get("font_size", 11)))
+        self._font_size.valueChanged.connect(self._on_font_size_changed)
+        form.addRow("Font size (pt):", self._font_size)
+
+        # --- Log level for audit trail ---
+        self._log_level = QComboBox()
+        self._log_level.addItems(["info", "debug"])
+        self._log_level.setCurrentText(self._cfg.get("log_level", "info"))
+        self._log_level.currentTextChanged.connect(self._on_log_level_changed)
+        form.addRow("Log level:", self._log_level)
+
+        self._open_logs_btn = QPushButton("Open logs folder")
+        self._open_logs_btn.clicked.connect(self._open_logs)
+        form.addRow("", self._open_logs_btn)
 
         # --- Schedule ---
         self._cadence = QComboBox()
@@ -164,6 +186,26 @@ class SettingsPage(QWidget):
         if app is not None:
             # cast is safe: QCoreApplication.instance() returns QApplication here
             apply_theme(app, new_theme)  # type: ignore[arg-type]
+
+    def _on_font_size_changed(self, new_size: int) -> None:
+        self._save_field("font_size", int(new_size))
+        app = QApplication.instance()
+        if app is not None:
+            font: QFont = app.font()  # type: ignore[attr-defined]
+            font.setPointSize(int(new_size))
+            app.setFont(font)  # type: ignore[attr-defined]
+
+    def _on_log_level_changed(self, new_level: str) -> None:
+        self._save_field("log_level", new_level)
+        configure_logging(level=new_level)
+
+    def _open_logs(self) -> None:
+        DEFAULT_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        opener = "open" if platform.system() == "Darwin" else "xdg-open"
+        try:
+            subprocess.Popen([opener, str(DEFAULT_LOG_DIR)])  # pylint: disable=consider-using-with
+        except OSError as exc:
+            QMessageBox.warning(self, "Open logs folder", f"Could not open folder: {exc}")
 
     def _pick_input(self) -> None:
         d = QFileDialog.getExistingDirectory(self, "Choose extraction location")
