@@ -73,6 +73,13 @@ class CardEditorWidget(QWidget):  # pylint: disable=too-many-instance-attributes
         button_row.addWidget(self._save_btn)
         button_row.addWidget(self._delete_btn)
         self._root.addLayout(button_row)
+
+        # card metadata: id + created/updated timestamps. Useful for audit
+        # ("when did this card get into the archive?") without opening the JSONL.
+        self._meta_label = QLabel("")
+        self._meta_label.setStyleSheet("color: rgba(160, 160, 168, 200); font-size: 90%;")
+        self._meta_label.setWordWrap(True)
+        self._root.addWidget(self._meta_label)
         self._root.addStretch(1)
 
         self._validate()
@@ -84,6 +91,12 @@ class CardEditorWidget(QWidget):  # pylint: disable=too-many-instance-attributes
             options=archived.card.options,
             correct=archived.card.correct_answer,
             tags=list(archived.card.tags),
+        )
+        created = archived.created_at.strftime("%Y-%m-%d %H:%M")
+        updated = archived.updated_at.strftime("%Y-%m-%d %H:%M")
+        source = archived.card.source_file or "-"
+        self._meta_label.setText(
+            f"ID: {archived.id}  |  Source: {source}  |  Created: {created}  |  Updated: {updated}"
         )
 
     def load_draft(self) -> None:
@@ -99,6 +112,7 @@ class CardEditorWidget(QWidget):  # pylint: disable=too-many-instance-attributes
             correct="A",
             tags=[],
         )
+        self._meta_label.setText("New card - unsaved")
         self._question.setFocus()
 
     # pylint: disable-next=too-many-arguments,too-many-positional-arguments

@@ -41,6 +41,11 @@ def _dark_palette() -> QPalette:
     p = QPalette()
     base = QColor(40, 40, 44)
     text = QColor(220, 220, 220)
+    # PlaceholderText is what QLineEdit uses for the empty-state hint. Qt's
+    # default derivation is ~30% alpha of Text - on a dark background that's
+    # nearly invisible. Set it explicitly so "Search...", "Type a tag..." etc
+    # stay readable.
+    placeholder = QColor(160, 160, 168)
     p.setColor(QPalette.ColorRole.Window, base)
     p.setColor(QPalette.ColorRole.WindowText, text)
     p.setColor(QPalette.ColorRole.Base, QColor(30, 30, 34))
@@ -48,6 +53,7 @@ def _dark_palette() -> QPalette:
     p.setColor(QPalette.ColorRole.ToolTipBase, text)
     p.setColor(QPalette.ColorRole.ToolTipText, text)
     p.setColor(QPalette.ColorRole.Text, text)
+    p.setColor(QPalette.ColorRole.PlaceholderText, placeholder)
     p.setColor(QPalette.ColorRole.Button, base)
     p.setColor(QPalette.ColorRole.ButtonText, text)
     p.setColor(QPalette.ColorRole.Highlight, QColor(42, 77, 143))

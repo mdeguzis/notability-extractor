@@ -12,6 +12,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QHBoxLayout,
     QHeaderView,
     QLineEdit,
@@ -36,6 +37,7 @@ _MAX_ROW_HEIGHT_PX = 66
 
 
 class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
+    # pylint: disable-next=too-many-statements
     def __init__(
         self,
         archive_path: Path | None = None,
@@ -54,7 +56,7 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        # left panel: toolbar + search box + card table
+        # left panel: toolbar + search box + tag filter + card table
         left = QVBoxLayout()
         toolbar = QHBoxLayout()
         self._add_btn = QPushButton("+ Add")
@@ -65,8 +67,13 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
 
         self._search = QLineEdit()
         self._search.setPlaceholderText("Search...")
-        self._search.textChanged.connect(self._on_search_changed)
+        self._search.textChanged.connect(self._on_filter_changed)
         left.addWidget(self._search)
+
+        self._tag_filter = QComboBox()
+        self._tag_filter.setPlaceholderText("Filter by tag...")
+        self._tag_filter.currentTextChanged.connect(self._on_filter_changed)
+        left.addWidget(self._tag_filter)
 
         self._table = QTableWidget(0, 3)
         self._table.setHorizontalHeaderLabels(["ID", "Tags", "Question"])
@@ -107,12 +114,32 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
     def refresh(self) -> None:
         """Reload from disk and rebuild the table."""
         self._cards = archive_store.load(self._archive_path)
+        all_tags = flt.all_tags(self._cards)
         # keep tag autocomplete pool in sync with what's actually in the archive
-        self._editor._known_tags = flt.all_tags(self._cards)  # pylint: disable=protected-access
-        self._on_search_changed(self._search.text())
+        self._editor._known_tags = all_tags  # pylint: disable=protected-access
+        # rebuild the filter combobox, preserving the current selection if it
+        # still exists in the new tag set
+        current = self._tag_filter.currentText()
+        self._tag_filter.blockSignals(True)
+        self._tag_filter.clear()
+        self._tag_filter.addItem("(all tags)")
+        for t in all_tags:
+            self._tag_filter.addItem(t)
+        if current and current != "(all tags)" and current in all_tags:
+            self._tag_filter.setCurrentText(current)
+        else:
+            self._tag_filter.setCurrentIndex(0)
+        self._tag_filter.blockSignals(False)
+        self._on_filter_changed()
 
-    def _on_search_changed(self, text: str) -> None:
-        visible = flt.by_text(self._cards, text) if text else self._cards
+    def _on_filter_changed(self, _text: str = "") -> None:
+        visible = list(self._cards)
+        tag = self._tag_filter.currentText()
+        if tag and tag != "(all tags)":
+            visible = flt.by_tags(visible, [tag])
+        query = self._search.text()
+        if query:
+            visible = flt.by_text(visible, query)
         self._table.setRowCount(len(visible))
         for row_idx, c in enumerate(visible):
             id_item = QTableWidgetItem(c.id[:8])

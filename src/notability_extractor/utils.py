@@ -41,12 +41,18 @@ def configure_logging(
     if to_file:
         try:
             DEFAULT_LOG_DIR.mkdir(parents=True, exist_ok=True)
-            file_handler = logging.handlers.RotatingFileHandler(
+            # Rotate at midnight, keep 20 dated files. Older logs get the
+            # date as a suffix (notability.log.2026-05-16) so you can scroll
+            # back through history for an audit.
+            file_handler = logging.handlers.TimedRotatingFileHandler(
                 DEFAULT_LOG_FILE,
-                maxBytes=1_000_000,
-                backupCount=5,
+                when="midnight",
+                interval=1,
+                backupCount=20,
                 encoding="utf-8",
+                utc=False,
             )
+            file_handler.suffix = "%Y-%m-%d"
             file_handler.setFormatter(
                 logging.Formatter(
                     "%(asctime)s %(levelname)-5s %(name)s: %(message)s",

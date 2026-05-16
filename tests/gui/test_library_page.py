@@ -46,5 +46,5 @@ def test_filter_by_text_narrows_list(qtbot, tmp_path: Path):
     page = LibraryPage(archive_path=archive)
     qtbot.addWidget(page)
     page._search.setText("photo")
-    page._on_search_changed("photo")
+    page._on_filter_changed("photo")
     assert page._table.rowCount() == 1
