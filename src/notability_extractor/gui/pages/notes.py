@@ -59,6 +59,11 @@ class NotesPage(QWidget):
         for n in self._notes:
             self._list.addItem(QListWidgetItem(n.name))
 
+    def set_input_dir(self, input_dir: Path | None) -> None:
+        """Update the source dir (called by MainWindow after Settings changes)."""
+        self._input_dir = input_dir
+        self.refresh()
+
     def _on_select(self, row: int) -> None:
         if 0 <= row < len(self._notes):
             self._viewer.setPlainText(self._notes[row].body)

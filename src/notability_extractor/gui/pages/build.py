@@ -81,6 +81,10 @@ class BuildPage(QWidget):
         if d:
             self._out.setText(d)
 
+    def set_input_dir(self, input_dir: Path | None) -> None:
+        """Update the source dir (called by MainWindow after Settings changes)."""
+        self._input_dir = input_dir
+
     def _build(self) -> None:
         out_dir = Path(self._out.text()).expanduser()
         out_dir.mkdir(parents=True, exist_ok=True)

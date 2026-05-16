@@ -33,9 +33,12 @@ _CRON_LINE = "0 * * * * notability-extractor --backup"
 
 
 class SettingsPage(QWidget):
-    def __init__(self) -> None:
+    def __init__(self, on_archive_changed: object = None) -> None:
         super().__init__()
         self._cfg = archive_config.load()
+        # fired after Pull / Import / Restore so MainWindow can refresh the
+        # other pages and the status bar. None is a no-op for standalone use.
+        self._on_archive_changed = on_archive_changed if callable(on_archive_changed) else None
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -167,6 +170,8 @@ class SettingsPage(QWidget):
             f"Pulled {added} new cards ({skipped} already known). "
             f"{len(deck.notes)} notes, {len(deck.summaries)} summaries available."
         )
+        if self._on_archive_changed is not None:
+            self._on_archive_changed()
 
     def _on_macos_extract(self) -> None:
         # pylint: disable=import-outside-toplevel
@@ -239,3 +244,5 @@ class SettingsPage(QWidget):
             "merge" if confirm == QMessageBox.StandardButton.Yes else "replace"
         )
         archive_backup.import_archive(Path(path), mode=mode)
+        if self._on_archive_changed is not None:
+            self._on_archive_changed()

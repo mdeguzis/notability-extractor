@@ -19,7 +19,9 @@ from notability_extractor.archive import store as archive_store
 _PAGE_NAMES = ["Library", "Notes", "Summaries", "Build", "Settings"]
 
 
-class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
+class MainWindow(
+    QMainWindow
+):  # pylint: disable=too-few-public-methods,too-many-instance-attributes
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Notability Extractor")
@@ -66,14 +68,30 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         raw_input_dir = cfg.get("input_dir", "") or ""
         input_dir = Path(raw_input_dir) if raw_input_dir else None
 
-        self._pages.addWidget(LibraryPage(on_change=self._refresh_status))
-        self._pages.addWidget(NotesPage(input_dir=input_dir))
-        self._pages.addWidget(SummariesPage(input_dir=input_dir))
-        self._pages.addWidget(BuildPage(input_dir=input_dir))
-        self._pages.addWidget(SettingsPage())
+        self._library_page = LibraryPage(on_change=self._refresh_status)
+        self._notes_page = NotesPage(input_dir=input_dir)
+        self._summaries_page = SummariesPage(input_dir=input_dir)
+        self._build_page = BuildPage(input_dir=input_dir)
+        self._settings_page = SettingsPage(on_archive_changed=self._refresh_all)
+
+        for page in (
+            self._library_page,
+            self._notes_page,
+            self._summaries_page,
+            self._build_page,
+            self._settings_page,
+        ):
+            self._pages.addWidget(page)
 
     def _on_sidebar_changed(self, row: int) -> None:
         self._pages.setCurrentIndex(row)
+        # refresh the destination page on tab switch so external mutations
+        # (CLI editing, another pull) show up without restart
+        page = self._pages.widget(row)
+        refresh_fn = getattr(page, "refresh", None)
+        if callable(refresh_fn):
+            refresh_fn()
+        self._refresh_status()
 
     def _refresh_status(self) -> None:
         try:
@@ -81,3 +99,19 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         except OSError:
             count = 0
         self._status.showMessage(f"archive: {count} cards")
+
+    def _refresh_all(self) -> None:
+        """Called by Settings after Pull / Import / Restore. Rereads config so
+        input_dir changes are picked up, then refreshes every page."""
+        # pylint: disable=import-outside-toplevel
+        from notability_extractor.archive import config as archive_config
+
+        cfg = archive_config.load()
+        raw_input_dir = cfg.get("input_dir", "") or ""
+        new_input_dir = Path(raw_input_dir) if raw_input_dir else None
+        # propagate the latest input_dir to the pages that need it
+        self._notes_page.set_input_dir(new_input_dir)
+        self._summaries_page.set_input_dir(new_input_dir)
+        self._build_page.set_input_dir(new_input_dir)
+        self._library_page.refresh()
+        self._refresh_status()
