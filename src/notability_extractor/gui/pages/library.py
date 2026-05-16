@@ -14,10 +14,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
     QHeaderView,
-    QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSplitter,
@@ -30,6 +27,7 @@ from PySide6.QtWidgets import (
 from notability_extractor.archive import filter as flt
 from notability_extractor.archive import store as archive_store
 from notability_extractor.gui.widgets.card_editor import CardEditorWidget
+from notability_extractor.gui.widgets.tag_filter import TagFilterButton
 from notability_extractor.model import ArchivedCard, Card
 
 _ID_ROLE = int(Qt.ItemDataRole.UserRole)
@@ -72,11 +70,9 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
         self._search.textChanged.connect(self._on_filter_changed)
         left.addWidget(self._search)
 
-        # multi-select tag filter: each row is a checkable tag; any-match
-        left.addWidget(QLabel("Filter by tag:"))
-        self._tag_filter = QListWidget()
-        self._tag_filter.setMaximumHeight(120)
-        self._tag_filter.itemChanged.connect(lambda _item: self._on_filter_changed())
+        # multi-select tag filter: opens a popup with a search box + checkable list
+        self._tag_filter = TagFilterButton()
+        self._tag_filter.changed.connect(self._on_filter_changed)
         left.addWidget(self._tag_filter)
 
         self._table = QTableWidget(0, 3)
@@ -121,32 +117,15 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
         all_tags = flt.all_tags(self._cards)
         # keep tag autocomplete pool in sync with what's actually in the archive
         self._editor._known_tags = all_tags  # pylint: disable=protected-access
-        # rebuild the filter list, preserving the set of currently-checked tags
-        # so a refresh after add/edit doesn't drop the user's selection
-        previously_checked = self._checked_tags()
-        self._tag_filter.blockSignals(True)
-        self._tag_filter.clear()
-        for t in all_tags:
-            item = QListWidgetItem(t)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setCheckState(
-                Qt.CheckState.Checked if t in previously_checked else Qt.CheckState.Unchecked
-            )
-            self._tag_filter.addItem(item)
-        self._tag_filter.blockSignals(False)
+        # preserve previously-checked tags across refresh so an add/edit
+        # doesn't drop the user's filter selection
+        previously_checked = set(self._tag_filter.checked_tags())
+        self._tag_filter.set_tags(all_tags, previously_checked)
         self._on_filter_changed()
-
-    def _checked_tags(self) -> list[str]:
-        out: list[str] = []
-        for i in range(self._tag_filter.count()):
-            item = self._tag_filter.item(i)
-            if item is not None and item.checkState() == Qt.CheckState.Checked:
-                out.append(item.text())
-        return out
 
     def _on_filter_changed(self, _text: str = "") -> None:
         visible = list(self._cards)
-        checked = self._checked_tags()
+        checked = self._tag_filter.checked_tags()
         if checked:
             # any-match: a card needs at least one checked tag to appear
             visible = flt.by_tags(visible, checked, mode="any")

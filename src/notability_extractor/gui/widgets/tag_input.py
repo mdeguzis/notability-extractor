@@ -43,7 +43,18 @@ def _normalize(raw: str) -> str:
 
 
 def _chip_stylesheet(color: str) -> str:
-    return f"background:{color}; color:#e8eef5; border-radius:10px; padding:2px 6px;"
+    return (
+        f"background:{color}; color:#e8eef5; border-radius:12px; "
+        "padding:4px 10px; font-size: 13px;"
+    )
+
+
+_ICON_BTN_STYLE = (
+    "QPushButton { background: transparent; border: none; color: #e8eef5; "
+    "font-size: 16px; font-weight: bold; padding: 0px; }"
+    "QPushButton:hover { color: #ffffff; }"
+)
+_ICON_BTN_SIZE = 24
 
 
 class TagInput(QWidget):
@@ -98,23 +109,25 @@ class TagInput(QWidget):
     def _build_chip(self, tag: str) -> QWidget:
         chip = QWidget()
         row = QHBoxLayout(chip)
-        row.setContentsMargins(6, 2, 4, 2)
-        row.setSpacing(2)
+        row.setContentsMargins(8, 4, 6, 4)
+        row.setSpacing(6)
         lbl = QLabel(tag)
+        lbl.setStyleSheet("font-size: 13px;")
 
         color = archive_config.get_tag_color(tag) or DEFAULT_CHIP_COLOR
         chip.setStyleSheet(_chip_stylesheet(color))
 
-        # dropdown arrow: opens a color menu
-        color_btn = QPushButton("▾")  # downward small triangle
-        color_btn.setFixedSize(16, 16)
-        color_btn.setStyleSheet("background: transparent; border: none; color: #e8eef5;")
+        # dropdown arrow: opens a color menu. Bigger triangle, bigger button.
+        color_btn = QPushButton("▼")  # ▼ filled down triangle
+        color_btn.setFixedSize(_ICON_BTN_SIZE, _ICON_BTN_SIZE)
+        color_btn.setStyleSheet(_ICON_BTN_STYLE)
         color_btn.setToolTip("Change color")
         color_btn.clicked.connect(lambda *_, t=tag, c=chip, b=color_btn: self._pick_color(t, c, b))
 
-        x = QPushButton("x")
-        x.setFixedSize(16, 16)
-        x.setStyleSheet("background: transparent; border: none; color: #e8eef5;")
+        x = QPushButton("✕")  # ✕ multiplication-X close icon
+        x.setFixedSize(_ICON_BTN_SIZE, _ICON_BTN_SIZE)
+        x.setStyleSheet(_ICON_BTN_STYLE)
+        x.setToolTip("Remove tag")
         # capture both tag and chip_widget to avoid the cell-var-from-loop issue
         x.clicked.connect(lambda *_, t=tag, c=chip: self._remove(t, c))
 
