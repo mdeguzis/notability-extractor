@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -40,7 +41,13 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
         self._on_change = on_change or (lambda: None)
         self._cards: list[ArchivedCard] = []
 
+        # pending = a fresh blank not yet saved to the archive. None means
+        # "no draft in flight". Save commits the draft; Delete or navigating
+        # to another card discards it.
+        self._pending_new = False
+
         outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
 
         # left panel: toolbar + search box + card list
         left = QVBoxLayout()
@@ -62,14 +69,21 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
 
         left_w = QWidget()
         left_w.setLayout(left)
-        left_w.setMaximumWidth(380)
-        outer.addWidget(left_w)
+        left_w.setMinimumWidth(200)
 
         # right panel: card editor
         self._editor = CardEditorWidget(known_tags=[])
         self._editor.saved.connect(self._on_saved)
         self._editor.deleted.connect(self._on_deleted)
-        outer.addWidget(self._editor, 1)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(left_w)
+        splitter.addWidget(self._editor)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([360, 820])
+        splitter.setChildrenCollapsible(False)
+        outer.addWidget(splitter)
 
         self.refresh()
 
@@ -94,6 +108,8 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
         item = self._list.item(row)
         if item is None:
             return
+        # navigating to an existing card discards any draft in flight
+        self._pending_new = False
         card_id = item.data(_ID_ROLE)
         for c in self._cards:
             if c.id == card_id:
@@ -101,30 +117,35 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
                 return
 
     def _on_add(self) -> None:
-        blank = Card(
-            question="",
-            options={"A": "", "B": "", "C": "", "D": ""},
-            correct_answer="A",
-            source_file="manual",
-            index=0,
-            tags=[],
-        )
-        archived = archive_store.add(blank, self._archive_path)
-        self.refresh()
-        self._on_change()
-        # scroll to and select the new card in the list
-        for i in range(self._list.count()):
-            item = self._list.item(i)
-            if item is not None and item.data(_ID_ROLE) == archived.id:
-                self._list.setCurrentRow(i)
-                break
+        # Show an unsaved draft in the editor. Don't write to disk yet -
+        # Save commits the draft, switching cards or pressing Delete discards.
+        self._pending_new = True
+        self._list.setCurrentRow(-1)
+        self._editor.load_draft()
 
     def _on_saved(self, card_id: str, new_card: Card) -> None:
+        if self._pending_new and card_id == "":
+            archived = archive_store.add(new_card, self._archive_path)
+            self._pending_new = False
+            self.refresh()
+            self._on_change()
+            # select the new row so the user sees the result
+            for i in range(self._list.count()):
+                item = self._list.item(i)
+                if item is not None and item.data(_ID_ROLE) == archived.id:
+                    self._list.setCurrentRow(i)
+                    break
+            return
         archive_store.update(card_id, new_card, self._archive_path)
         self.refresh()
         self._on_change()
 
     def _on_deleted(self, card_id: str) -> None:
+        if self._pending_new and card_id == "":
+            # discard the unsaved draft, no archive write
+            self._pending_new = False
+            self.refresh()
+            return
         confirm = QMessageBox.question(
             self,
             "Delete card?",

@@ -4,36 +4,33 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QHBoxLayout,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QSplitter,
     QStackedWidget,
     QStatusBar,
-    QWidget,
 )
 
 from notability_extractor.archive import store as archive_store
 
-_PAGE_NAMES = ["Library", "Notes", "Summaries", "Build", "Settings"]
+_PAGE_NAMES = ["Library", "Notes", "Summaries", "Export", "Settings"]
 
 
 class MainWindow(
     QMainWindow
-):  # pylint: disable=too-few-public-methods,too-many-instance-attributes
+):  # pylint: disable=too-few-public-methods,too-many-instance-attributes,attribute-defined-outside-init
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Notability Extractor")
         self.resize(1280, 800)
 
-        central = QWidget()
-        layout = QHBoxLayout(central)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
         self._sidebar = QListWidget()
-        self._sidebar.setFixedWidth(160)
+        # min width keeps the sidebar usable at small sizes but the user can
+        # drag the splitter to widen it for long question titles
+        self._sidebar.setMinimumWidth(120)
         for name in _PAGE_NAMES:
             self._sidebar.addItem(QListWidgetItem(name))
         self._sidebar.currentRowChanged.connect(  # pylint: disable=no-member
@@ -43,10 +40,15 @@ class MainWindow(
         self._pages = QStackedWidget()
         self._build_pages()
 
-        layout.addWidget(self._sidebar)
-        layout.addWidget(self._pages, 1)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(self._sidebar)
+        splitter.addWidget(self._pages)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([180, 1100])
+        splitter.setChildrenCollapsible(False)
 
-        self.setCentralWidget(central)
+        self.setCentralWidget(splitter)
         self._status = QStatusBar()
         self.setStatusBar(self._status)
         self._refresh_status()
@@ -58,7 +60,7 @@ class MainWindow(
         # every test that just needs MainWindow to instantiate cleanly.
         # pylint: disable=import-outside-toplevel
         from notability_extractor.archive import config as archive_config
-        from notability_extractor.gui.pages.build import BuildPage
+        from notability_extractor.gui.pages.export import ExportPage
         from notability_extractor.gui.pages.library import LibraryPage
         from notability_extractor.gui.pages.notes import NotesPage
         from notability_extractor.gui.pages.settings import SettingsPage
@@ -71,14 +73,14 @@ class MainWindow(
         self._library_page = LibraryPage(on_change=self._refresh_status)
         self._notes_page = NotesPage(input_dir=input_dir)
         self._summaries_page = SummariesPage(input_dir=input_dir)
-        self._build_page = BuildPage(input_dir=input_dir)
+        self._export_page = ExportPage(input_dir=input_dir)
         self._settings_page = SettingsPage(on_archive_changed=self._refresh_all)
 
         for page in (
             self._library_page,
             self._notes_page,
             self._summaries_page,
-            self._build_page,
+            self._export_page,
             self._settings_page,
         ):
             self._pages.addWidget(page)
@@ -112,6 +114,6 @@ class MainWindow(
         # propagate the latest input_dir to the pages that need it
         self._notes_page.set_input_dir(new_input_dir)
         self._summaries_page.set_input_dir(new_input_dir)
-        self._build_page.set_input_dir(new_input_dir)
+        self._export_page.set_input_dir(new_input_dir)
         self._library_page.refresh()
         self._refresh_status()

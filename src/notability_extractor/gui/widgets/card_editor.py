@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFormLayout,
@@ -79,17 +78,49 @@ class CardEditorWidget(QWidget):  # pylint: disable=too-many-instance-attributes
         self._validate()
 
     def load_card(self, archived: ArchivedCard) -> None:
-        self._card_id = archived.id
-        self._question.setPlainText(archived.card.question)
+        self._load_fields(
+            card_id=archived.id,
+            question=archived.card.question,
+            options=archived.card.options,
+            correct=archived.card.correct_answer,
+            tags=list(archived.card.tags),
+        )
+
+    def load_draft(self) -> None:
+        """Show an empty editor for a new (not-yet-saved) card.
+
+        card_id is the empty string. LibraryPage interprets that as
+        'commit a new ArchivedCard on save' rather than 'update existing'.
+        """
+        self._load_fields(
+            card_id="",
+            question="",
+            options={"A": "", "B": "", "C": "", "D": ""},
+            correct="A",
+            tags=[],
+        )
+        self._question.setFocus()
+
+    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
+    def _load_fields(
+        self,
+        card_id: str,
+        question: str,
+        options: dict[str, str],
+        correct: str,
+        tags: list[str],
+    ) -> None:
+        self._card_id = card_id
+        self._question.setPlainText(question)
         for letter in ("A", "B", "C", "D"):
-            self._option_edits[letter].setText(archived.card.options.get(letter, ""))
+            self._option_edits[letter].setText(options.get(letter, ""))
         for btn in self._correct_radios.buttons():
-            btn.setChecked(btn.property("letter") == archived.card.correct_answer)
-        # rebuild tag input with this card's tags
+            btn.setChecked(btn.property("letter") == correct)
+        # rebuild the tag input with this card's tags
         old_index = self._root.indexOf(self._tags)
         self._root.removeWidget(self._tags)
         self._tags.deleteLater()
-        self._tags = TagInput(initial=list(archived.card.tags), known=self._known_tags)
+        self._tags = TagInput(initial=list(tags), known=self._known_tags)
         self._root.insertWidget(old_index, self._tags)
         self._highlight_correct()
         self._validate()
@@ -101,16 +132,16 @@ class CardEditorWidget(QWidget):  # pylint: disable=too-many-instance-attributes
         self._save_btn.setEnabled(bool(q) and all_options_filled and has_correct)
 
     def _highlight_correct(self) -> None:
+        # use a semi-transparent green tint via stylesheet so it overlays the
+        # current theme (works in both light and dark mode). Non-correct rows
+        # get an empty stylesheet so the theme palette shows through.
         correct_btn = self._correct_radios.checkedButton()
         correct_letter = correct_btn.property("letter") if correct_btn is not None else None
         for letter, edit in self._option_edits.items():
-            pal = edit.palette()
-            is_correct = letter == correct_letter
-            pal.setColor(
-                QPalette.ColorRole.Base,
-                QColor(220, 245, 220) if is_correct else QColor("white"),
-            )
-            edit.setPalette(pal)
+            if letter == correct_letter:
+                edit.setStyleSheet("QLineEdit { background-color: rgba(60, 160, 90, 80); }")
+            else:
+                edit.setStyleSheet("")
 
     def _on_save(self) -> None:
         if self._card_id is None:
@@ -129,5 +160,7 @@ class CardEditorWidget(QWidget):  # pylint: disable=too-many-instance-attributes
         self.saved.emit(self._card_id, new_card)
 
     def _on_delete(self) -> None:
-        if self._card_id:
+        # card_id of None means nothing is loaded; "" is a pending draft
+        # which the LibraryPage will discard
+        if self._card_id is not None:
             self.deleted.emit(self._card_id)

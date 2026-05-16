@@ -1,4 +1,4 @@
-"""Build page: pick output dir, choose formats, run build."""
+"""Export page: write the archive out to apkg / json / md files."""
 
 # pylint: disable=no-member,too-many-instance-attributes
 
@@ -24,7 +24,7 @@ from notability_extractor.build import flashcards, notes, summaries
 from notability_extractor.build.reader import read_input_dir
 
 
-class BuildPage(QWidget):
+class ExportPage(QWidget):
     def __init__(self, input_dir: Path | None = None) -> None:
         super().__init__()
         self._input_dir = input_dir
@@ -69,7 +69,7 @@ class BuildPage(QWidget):
         formats.setLayout(f_layout)
         layout.addWidget(formats)
 
-        run = QPushButton("Build")
+        run = QPushButton("Export")
         run.clicked.connect(self._build)
         layout.addWidget(run)
         self._log = QTextEdit()
