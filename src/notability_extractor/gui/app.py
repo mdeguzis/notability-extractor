@@ -6,6 +6,7 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
+from notability_extractor.archive import config as archive_config
 from notability_extractor.utils import configure_logging, get_logger
 
 if TYPE_CHECKING:
@@ -44,7 +45,8 @@ def build_app(headless: bool = False) -> tuple[QApplication, MainWindow]:
     from notability_extractor.gui.main_window import MainWindow
     from notability_extractor.gui.theme import apply_theme
 
-    apply_theme(app, "auto")
+    saved_theme = archive_config.get("theme")
+    apply_theme(app, saved_theme if saved_theme in ("light", "dark", "auto") else "auto")
     window = MainWindow()
     if not headless:
         window.show()

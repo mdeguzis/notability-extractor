@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QListWidget,
@@ -53,16 +55,21 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         # Keep page imports inside the method so a missing page doesn't blow up
         # every test that just needs MainWindow to instantiate cleanly.
         # pylint: disable=import-outside-toplevel
+        from notability_extractor.archive import config as archive_config
         from notability_extractor.gui.pages.build import BuildPage
         from notability_extractor.gui.pages.library import LibraryPage
         from notability_extractor.gui.pages.notes import NotesPage
         from notability_extractor.gui.pages.settings import SettingsPage
         from notability_extractor.gui.pages.summaries import SummariesPage
 
+        cfg = archive_config.load()
+        raw_input_dir = cfg.get("input_dir", "") or ""
+        input_dir = Path(raw_input_dir) if raw_input_dir else None
+
         self._pages.addWidget(LibraryPage(on_change=self._refresh_status))
-        self._pages.addWidget(NotesPage())
-        self._pages.addWidget(SummariesPage())
-        self._pages.addWidget(BuildPage())
+        self._pages.addWidget(NotesPage(input_dir=input_dir))
+        self._pages.addWidget(SummariesPage(input_dir=input_dir))
+        self._pages.addWidget(BuildPage(input_dir=input_dir))
         self._pages.addWidget(SettingsPage())
 
     def _on_sidebar_changed(self, row: int) -> None:
