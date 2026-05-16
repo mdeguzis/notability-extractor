@@ -11,13 +11,15 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QHBoxLayout,
+    QHeaderView,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -28,6 +30,9 @@ from notability_extractor.gui.widgets.card_editor import CardEditorWidget
 from notability_extractor.model import ArchivedCard, Card
 
 _ID_ROLE = int(Qt.ItemDataRole.UserRole)
+
+# row height = approx 3 lines of text. Calibrated for default Qt font ~22px line height.
+_MAX_ROW_HEIGHT_PX = 66
 
 
 class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
@@ -49,7 +54,7 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        # left panel: toolbar + search box + card list
+        # left panel: toolbar + search box + card table
         left = QVBoxLayout()
         toolbar = QHBoxLayout()
         self._add_btn = QPushButton("+ Add")
@@ -63,13 +68,25 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
         self._search.textChanged.connect(self._on_search_changed)
         left.addWidget(self._search)
 
-        self._list = QListWidget()
-        self._list.currentRowChanged.connect(self._on_select)
-        left.addWidget(self._list, 1)
+        self._table = QTableWidget(0, 3)
+        self._table.setHorizontalHeaderLabels(["ID", "Tags", "Question"])
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.setWordWrap(True)
+        self._table.verticalHeader().setVisible(False)
+        header = self._table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self._table.setColumnWidth(0, 80)
+        self._table.setColumnWidth(1, 140)
+        self._table.currentCellChanged.connect(self._on_cell_changed)
+        left.addWidget(self._table, 1)
 
         left_w = QWidget()
         left_w.setLayout(left)
-        left_w.setMinimumWidth(200)
+        left_w.setMinimumWidth(300)
 
         # right panel: card editor
         self._editor = CardEditorWidget(known_tags=[])
@@ -79,16 +96,16 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(left_w)
         splitter.addWidget(self._editor)
-        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([360, 820])
+        splitter.setSizes([520, 760])
         splitter.setChildrenCollapsible(False)
         outer.addWidget(splitter)
 
         self.refresh()
 
     def refresh(self) -> None:
-        """Reload from disk and rebuild the list."""
+        """Reload from disk and rebuild the table."""
         self._cards = archive_store.load(self._archive_path)
         # keep tag autocomplete pool in sync with what's actually in the archive
         self._editor._known_tags = flt.all_tags(self._cards)  # pylint: disable=protected-access
@@ -96,16 +113,23 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
 
     def _on_search_changed(self, text: str) -> None:
         visible = flt.by_text(self._cards, text) if text else self._cards
-        self._list.clear()
-        for c in visible:
-            item = QListWidgetItem(c.card.question or "(blank)")
-            item.setData(_ID_ROLE, c.id)
-            self._list.addItem(item)
+        self._table.setRowCount(len(visible))
+        for row_idx, c in enumerate(visible):
+            id_item = QTableWidgetItem(c.id[:8])
+            id_item.setData(_ID_ROLE, c.id)
+            self._table.setItem(row_idx, 0, id_item)
+            self._table.setItem(row_idx, 1, QTableWidgetItem(", ".join(c.card.tags)))
+            self._table.setItem(row_idx, 2, QTableWidgetItem(c.card.question or "(blank)"))
+        self._table.resizeRowsToContents()
+        # cap row height at ~3 lines so long questions don't blow up the row
+        for row_idx in range(self._table.rowCount()):
+            if self._table.rowHeight(row_idx) > _MAX_ROW_HEIGHT_PX:
+                self._table.setRowHeight(row_idx, _MAX_ROW_HEIGHT_PX)
 
-    def _on_select(self, row: int) -> None:
+    def _on_cell_changed(self, row: int, _col: int, _prev_row: int, _prev_col: int) -> None:
         if row < 0:
             return
-        item = self._list.item(row)
+        item = self._table.item(row, 0)
         if item is None:
             return
         # navigating to an existing card discards any draft in flight
@@ -116,11 +140,18 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
                 self._editor.load_card(c)
                 return
 
+    def _select_id(self, card_id: str) -> None:
+        for row_idx in range(self._table.rowCount()):
+            item = self._table.item(row_idx, 0)
+            if item is not None and item.data(_ID_ROLE) == card_id:
+                self._table.setCurrentCell(row_idx, 0)
+                return
+
     def _on_add(self) -> None:
         # Show an unsaved draft in the editor. Don't write to disk yet -
         # Save commits the draft, switching cards or pressing Delete discards.
         self._pending_new = True
-        self._list.setCurrentRow(-1)
+        self._table.setCurrentCell(-1, -1)
         self._editor.load_draft()
 
     def _on_saved(self, card_id: str, new_card: Card) -> None:
@@ -129,20 +160,15 @@ class LibraryPage(QWidget):  # pylint: disable=too-many-instance-attributes
             self._pending_new = False
             self.refresh()
             self._on_change()
-            # select the new row so the user sees the result
-            for i in range(self._list.count()):
-                item = self._list.item(i)
-                if item is not None and item.data(_ID_ROLE) == archived.id:
-                    self._list.setCurrentRow(i)
-                    break
+            self._select_id(archived.id)
             return
         archive_store.update(card_id, new_card, self._archive_path)
         self.refresh()
         self._on_change()
+        self._select_id(card_id)
 
     def _on_deleted(self, card_id: str) -> None:
         if self._pending_new and card_id == "":
-            # discard the unsaved draft, no archive write
             self._pending_new = False
             self.refresh()
             return

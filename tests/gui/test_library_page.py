@@ -37,7 +37,7 @@ def test_library_lists_all_cards(qtbot, tmp_path: Path):
     _seed(archive)
     page = LibraryPage(archive_path=archive)
     qtbot.addWidget(page)
-    assert page._list.count() == 3
+    assert page._table.rowCount() == 3
 
 
 def test_filter_by_text_narrows_list(qtbot, tmp_path: Path):
@@ -47,4 +47,4 @@ def test_filter_by_text_narrows_list(qtbot, tmp_path: Path):
     qtbot.addWidget(page)
     page._search.setText("photo")
     page._on_search_changed("photo")
-    assert page._list.count() == 1
+    assert page._table.rowCount() == 1
