@@ -1,7 +1,7 @@
 # Makefile for notability-extractor
 # Run `make help` to list targets.
 
-.DEFAULT_GOAL := help
+.DEFAULT_GOAL := check
 SHELL := bash
 
 # pass CLI args through: make run ARGS="--list-tables"
